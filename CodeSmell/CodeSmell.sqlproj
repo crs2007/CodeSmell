@@ -57,5 +57,135 @@
   <Import Condition="'$(SQLDBExtensionsRefPath)' == ''" Project="$(MSBuildExtensionsPath)\Microsoft\VisualStudio\v$(VisualStudioVersion)\SSDT\Microsoft.Data.Tools.Schema.SqlTasks.targets" />
   <ItemGroup>
     <Folder Include="Properties" />
+    <Folder Include="dbo\" />
+    <Folder Include="dbo\Tables\" />
+    <Folder Include="Server\" />
+    <Folder Include="Server\Tables\" />
+    <Folder Include="History\" />
+    <Folder Include="History\Tables\" />
+    <Folder Include="Background\" />
+    <Folder Include="Background\Tables\" />
+    <Folder Include="dbo\Views\" />
+    <Folder Include="dbo\Functions\" />
+    <Folder Include="dbo\Stored Procedures\" />
+    <Folder Include="Setup\" />
+    <Folder Include="Setup\Stored Procedures\" />
+    <Folder Include="Server\Stored Procedures\" />
+    <Folder Include="History\Stored Procedures\" />
+    <Folder Include="Background\Stored Procedures\" />
+    <Folder Include="dbo\User Defined Types\" />
+    <Folder Include="Assemblies\" />
+    <Folder Include="Security\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Build Include="dbo\Tables\Setup_GlobleParameter.sql" />
+    <Build Include="dbo\Tables\Mng_ApplicationErrorLog.sql" />
+    <Build Include="dbo\Tables\App_SubjectGroup.sql" />
+    <Build Include="dbo\Tables\App_SQLServerVersion.sql" />
+    <Build Include="dbo\Tables\App_Severity.sql" />
+    <Build Include="dbo\Tables\App_RegexPettern.sql" />
+    <Build Include="dbo\Tables\App_GeneralCheck.sql" />
+    <Build Include="dbo\Tables\App_Exclusion.sql" />
+    <Build Include="dbo\Tables\App_Error.sql" />
+    <Build Include="dbo\Tables\App_enum_SearchRegexMethod.sql" />
+    <Build Include="dbo\Tables\App_DBVersion.sql" />
+    <Build Include="dbo\Tables\App_CL_ErrVerPet.sql" />
+    <Build Include="Server\Tables\Passwords.sql" />
+    <Build Include="Server\Tables\VM_MemoryOverhead.sql" />
+    <Build Include="History\Tables\App_DetailRun.sql" />
+    <Build Include="History\Tables\App_IgnoreList.sql" />
+    <Build Include="History\Tables\App_MainRun.sql" />
+    <Build Include="Background\Tables\Inner_sql_ObjectNameRegex.sql" />
+    <Build Include="Background\Tables\Inner_sql_DefinitionRegex.sql" />
+    <Build Include="Background\Tables\Inner_sql_modules.sql" />
+    <Build Include="dbo\Views\vw_Error_SQL_Server_CurrentVersion.sql" />
+    <Build Include="dbo\Views\vw_Error_SQL_Server_2012.sql" />
+    <Build Include="dbo\Views\vw_Error_SQL_Server_2008.sql" />
+    <Build Include="dbo\Functions\ufn_Util_clr_RegexReplace.sql" />
+    <Build Include="dbo\Functions\ufn_Util_clr_RegexIsMatch.sql" />
+    <Build Include="dbo\Functions\ufn_get_default_path.sql" />
+    <Build Include="dbo\Functions\Setup_GetGlobalParm.sql" />
+    <Build Include="dbo\Functions\ufn_Util_clr_RegexSplit.sql" />
+    <Build Include="dbo\Functions\ufn_Util_clr_RegexMatch.sql" />
+    <Build Include="dbo\Stored Procedures\usp_SQLskills_SQL2008_finddupes_helpindex.sql" />
+    <Build Include="dbo\Stored Procedures\usp_SQLskills_SQL2008_finddupes.sql" />
+    <Build Include="dbo\Stored Procedures\usp_SQLskills_ExposeColsInIndexLevels_INCLUDE_UNORDERED.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Schema_ViewDependOnView.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Schema_TriggerWitoutSETNOCOUNT.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Schema_TimeStampRowversionNullable.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Schema_SmallVariableLength.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Schema_SelectAll.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Schema_SchemaAsUser.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Schema_QuotedIdentifierOff.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Schema_PartitionLevelLockEscalation.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Schema_NotTrustedConstreints.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Schema_IdentCurrentLeft.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Schema_FindNonCompileObject.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Schema_DeprecatedImageType.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Schema_DefaultConstraintThatNotRelevant.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Schema_ClustredUniqueidentifier.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Schema_BrokenDependencies.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Index_ViewHeap.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Index_FindOverLength.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Index_FindNunWithManyColumns.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Index_FindMissingIndex.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Index_FindIndexesNotInUse.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Index_FindDisabledIndexes.sql" />
+    <Build Include="dbo\Stored Procedures\usp_DesignStandard_InvalidUQName.sql" />
+    <Build Include="dbo\Stored Procedures\usp_DesignStandard_InvalidPKName.sql" />
+    <Build Include="dbo\Stored Procedures\usp_DesignStandard_InvalidFKName.sql" />
+    <Build Include="dbo\Stored Procedures\usp_DesignStandard_ColumnLowerLetter.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Database_UnusedSP.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Database_UnusedParameterOnSP.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Database_msdbDataFileSize.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Database_LOGFileSizeVSDataFileSize.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Database_LOGFileSize.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Database_LastLogBackup.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Database_LastBackup.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Database_DateOnProcHeader.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Database_CollationMismatchTempDB.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Database_CollationMismatch.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Database_CheckDB.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Database_BackupLocation.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Bug_dm_db_index_usage_stats.sql" />
+    <Build Include="dbo\Stored Procedures\usp_App_RunValidationCheckOnSP.sql" />
+    <Build Include="dbo\Stored Procedures\usp_App_RunCheck2.sql" />
+    <Build Include="dbo\Stored Procedures\usp_App_RunCheck.sql" />
+    <Build Include="dbo\Stored Procedures\ups_msdb_DeleteMailHistory.sql" />
+    <Build Include="dbo\Stored Procedures\ups_msdb_DeleteJobHistory.sql" />
+    <Build Include="dbo\Stored Procedures\ups_msdb_DeleteHistory.sql" />
+    <Build Include="dbo\Stored Procedures\ups_msdb_DeleteBackupHistory.sql" />
+    <Build Include="Setup\Stored Procedures\usp_CleanUp.sql" />
+    <Build Include="Setup\Stored Procedures\usp_CreateSPTemplate.sql" />
+    <Build Include="Setup\Stored Procedures\usp_StatUp.sql" />
+    <Build Include="Server\Stored Procedures\usp_App_RunCheck.sql" />
+    <Build Include="History\Stored Procedures\usp_GetLastDefaultParameter.sql" />
+    <Build Include="History\Stored Procedures\usp_SetIgnoreList.sql" />
+    <Build Include="History\Stored Procedures\usp_GetLastRunningDetail.sql" />
+    <Build Include="Background\Stored Procedures\usp_INNER_PopulateTable.sql" />
+    <Build Include="dbo\User Defined Types\IntArray.sql" />
+    <Build Include="dbo\User Defined Types\IgnoreList.sql" />
+    <Build Include="Security\Setup.sql" />
+    <Build Include="Security\Server.sql" />
+    <Build Include="Security\Run.sql" />
+    <Build Include="Security\History.sql" />
+    <Build Include="Security\Check.sql" />
+    <Build Include="Security\Background.sql" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="Assemblies\CodeSmallesCLR.dll" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="CodeSmallesCLR">
+      <HintPath>Assemblies\CodeSmallesCLR.dll</HintPath>
+      <SqlAssemblyName>CodeSmallesCLR</SqlAssemblyName>
+      <IsModelAware>True</IsModelAware>
+      <GenerateSqlClrDdl>False</GenerateSqlClrDdl>
+      <SqlOwnerName>dbo</SqlOwnerName>
+      <SqlPermissionSet>EXTERNAL_ACCESS</SqlPermissionSet>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <PostDeploy Include="Script.PostDeployment_DATA.sql" />
   </ItemGroup>
 </Project>
