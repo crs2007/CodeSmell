@@ -1,5 +1,4 @@
 ﻿CREATE PROCEDURE [Util].[USP_PrintConfigTableData]
-	@I_Text		nvarchar(max)
 WITH EXECUTE AS OWNER
 AS
 ------------------------------------------------------------------
