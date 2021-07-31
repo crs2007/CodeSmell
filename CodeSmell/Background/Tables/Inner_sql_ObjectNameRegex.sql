@@ -3,6 +3,13 @@
     [FullObjectName]      [sysname] NOT NULL,
     [SearchRegexMethodID] INT       NOT NULL,
     [ObjectName]          [sysname] NOT NULL,
-    CONSTRAINT [PK_Inner_sql_ObjectNameRegex] PRIMARY KEY CLUSTERED ([ID] ASC, [FullObjectName] ASC)
+    [MainRunID]           INT       NOT NULL
 );
+
+
+
+
+GO
+CREATE CLUSTERED INDEX [CIX_Inner_sql_ObjectNameRegex]
+    ON [Background].[Inner_sql_ObjectNameRegex]([MainRunID] ASC) WITH (DATA_COMPRESSION = PAGE);
 

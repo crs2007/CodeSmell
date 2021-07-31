@@ -3,15 +3,18 @@
 -- Create date: 22/12/2013
 -- Update date: 24/08/2014 @ObjectID INT
 --				13/07/2015 @CheckID INT = NULL
+--				26/07/2021 @LoginName sysname = NULL,@RunningID INT = NULL. Remove Temp tables
 -- Description:	Invalid FK Name
 -- =============================================
 CREATE PROCEDURE [dbo].[usp_DesignStandard_InvalidFKName]
 	@DatabaseName sysname,
-	@Massege NVARCHAR(1000),
+	@Message NVARCHAR(1000),
 	@URL_Reference VARCHAR(512),
 	@SeverityName sysname,
 	@ObjectID INT = NULL,
-	@CheckID INT = NULL
+	@CheckID INT = NULL,
+	@LoginName sysname = NULL,
+	@RunningID INT = NULL
 AS
 BEGIN
 	SET NOCOUNT ON;
@@ -24,26 +27,23 @@ BEGIN
 
 	IF @@ROWCOUNT = 0 
 	BEGIN
-		IF OBJECT_ID('tempdb..#Mng_ApplicationErrorLog') IS NOT NULL
-		INSERT #Mng_ApplicationErrorLog
-		SELECT OBJECT_NAME(@@PROCID),'You must enter valid local database name insted - ' + ISNULL(N' insted - ' + QUOTENAME(@DatabaseName),N'') ,HOST_NAME(),USER_NAME();  
+		INSERT dbo.Mng_ApplicationErrorLog(ProcedureName, ErrorMessage, HostName, LoginName, ExecutionTime, MainRunID)
+		SELECT OBJECT_NAME(@@PROCID),'You must enter valid local database name insted - ' + ISNULL(N' insted - ' + QUOTENAME(@DatabaseName),N'') ,HOST_NAME(),@LoginName,GETDATE(),@RunningID;  
 		RETURN -1;
 	END
-	DECLARE @sqlCmd NVARCHAR(max) ,
-			@prefix NVARCHAR(1000) = N'';
+	DECLARE @sqlCmd NVARCHAR(MAX) ;
 
-	IF OBJECT_ID('tempdb..#Exeption') IS NOT NULL SET @prefix = N'
-	INSERT	#Exeption';
-
-	SELECT	@sqlCmd = @prefix + N'
-	SELECT	@DatabaseName DatabaseName,
+	SELECT	@sqlCmd = N'INSERT [' + DB_NAME() + '].dbo.App_Exeption(MainRunID, DatabaseName, ObjectName, Type, ColumnName, ConstraintName, Message, URL, Severity, ErrorID)
+	SELECT	DISTINCT @RunningID,
+			@DatabaseName DatabaseName,
 			OBJECT_SCHEMA_NAME(fk.parent_object_id,DB_ID(''' + @DatabaseName + ''')) + ''.'' + OBJECT_NAME(fk.parent_object_id,DB_ID(''' + @DatabaseName + ''')) ObjectName,
 			''DesignStandard'' Type,
 			c.NAME ColumnName,
 			fk.name + '' - Current FK Name'' ConstraintName,
-			@Massege Massege,
+			@Message Message,
 			@URL_Reference URL,
-			@SeverityName' + CASE WHEN @CheckID IS NOT NULL THEN ',@CheckID' ELSE N'' END + '
+			@SeverityName Severity,
+			@CheckID
 			-- CASE WHEN CHARINDEX(''_'', c.NAME) = 0
    --          THEN ''FK_'' + OBJECT_NAME(fk.parent_object_id,DB_ID(''' + @DatabaseName + ''')) + ''_'' + OBJECT_NAME(fk.referenced_object_id,DB_ID(''' + @DatabaseName + '''))
    --          ELSE ''FK_'' + OBJECT_NAME(fk.parent_object_id,DB_ID(''' + @DatabaseName + ''')) + ''_'' OBJECT_NAME(fk.referenced_object_id,DB_ID(''' + @DatabaseName + ''')) + ''_''
@@ -68,52 +68,29 @@ BEGIN
 																  CHARINDEX(''_'',
 																  REVERSE(c.NAME)))),'''')
 				 )
-			)
-			AND c.NAME NOT IN (''UpdateUserID'',''UpdateCustomerID'',''CreateCustomerID'',''CreateUserID'',''CreateSiteID'',''UpdateSiteID'' )
-			AND fk.name NOT IN (
-								''FK_UserMng_OrganizationUnit_UserMng_OrganizationUnit_BaseID'',
-								''FK_CargoControl_EntryExitCargoMovement_Sites_Site_Create'',
-								''FK_CargoControl_EntryExitCargoMovement_Sites_Site_Update'',
-								''FK_Storage_StorageMessage_Sites_Site_Create'',
-								''FK_Storage_StorageMessage_Sites_Site_Update'',
-								''FK_Storage_UnusualEventMessage_Sites_Site_Create'',
-								''FK_Storage_UnusualEventMessage_Sites_Site_Update'',
-								''FK_RiskMng_RiskFactorCondition_DataDic_c_Field1'',
-								''FK_RiskMng_RiskFactorCondition_DataDic_c_Field2'',
-								''FK_RiskMng_RiskFactorCondition_DataDic_Relationship1'',
-								''FK_RiskMng_RiskFactorCondition_DataDic_Relationship2'',
-								''FK_Deficit_DeficitFile_Sites_Site_Create'',
-								''FK_Deficit_DeficitFile_Sites_Site_Update'' 
-								)
-			AND OBJECT_SCHEMA_NAME(fk.object_id,DB_ID(''' + @DatabaseName + ''')) NOT IN (''Actimize'');
+			);
 			';
-	
+
 	BEGIN TRY
 		EXEC sp_executesql @sqlCmd, 
 				N'@DatabaseName sysname,
-				@Massege NVARCHAR(1000),
+				@Message NVARCHAR(1000),
 				@URL_Reference VARCHAR(512),
 				@SeverityName sysname,
 				@ObjectID INT,
-				@CheckID INT', 
+				@CheckID INT,
+				@RunningID INT', 
 				@DatabaseName = @DatabaseName,
-				@Massege = @Massege,
+				@Message = @Message,
 				@URL_Reference = @URL_Reference,
 				@SeverityName = @SeverityName,
 				@ObjectID = @ObjectID,
-				@CheckID = @CheckID;
-		
+				@CheckID = @CheckID,
+				@RunningID = @RunningID;
 	END TRY
 	BEGIN CATCH
-		IF OBJECT_ID('tempdb..#Mng_ApplicationErrorLog') IS NOT NULL
-			INSERT #Mng_ApplicationErrorLog
-			SELECT OBJECT_NAME(@@PROCID),ERROR_MESSAGE(), HOST_NAME(),USER_NAME();
-		ELSE
-		BEGIN
-			PRINT @sqlCmd;
-			SELECT OBJECT_NAME(@@PROCID),ERROR_MESSAGE(), HOST_NAME(),USER_NAME();
-		END
-			
+		INSERT dbo.Mng_ApplicationErrorLog(ProcedureName, ErrorMessage, HostName, LoginName, ExecutionTime, MainRunID)
+		SELECT OBJECT_NAME(@@PROCID),ERROR_MESSAGE(), HOST_NAME(),@LoginName,GETDATE(),@RunningID; 
 		RETURN -1;
 	END CATCH
 END

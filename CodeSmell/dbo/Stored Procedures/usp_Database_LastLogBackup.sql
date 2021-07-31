@@ -2,17 +2,20 @@
 -- Author:		Sharon
 -- Create date: 16/06/2013
 --				13/07/2015 @CheckID INT = NULL
+--				26/07/2021 @LoginName sysname = NULL,@RunningID INT = NULL. Remove Temp tables
 -- Description:	Check last known successful Log backup.
 -- =============================================
 CREATE PROCEDURE [dbo].[usp_Database_LastLogBackup]
 	@DatabaseName sysname,
-	@Massege NVARCHAR(1000),
+	@Message NVARCHAR(1000),
 	@URL_Reference VARCHAR(512),
-	@SeverityName sysname = NULL,
-	@CheckID INT = NULL
+	@SeverityName sysname,
+	@ObjectID INT = NULL,
+	@CheckID INT = NULL,
+	@LoginName sysname = NULL,
+	@RunningID INT = NULL
 AS
 BEGIN
-
 	SET NOCOUNT ON;
 	DECLARE @DBName NVARCHAR(129);
 
@@ -23,26 +26,23 @@ BEGIN
 
 	IF @@ROWCOUNT = 0 
 	BEGIN
-		IF OBJECT_ID('tempdb..#Mng_ApplicationErrorLog') IS NOT NULL
-		INSERT #Mng_ApplicationErrorLog
-		SELECT OBJECT_NAME(@@PROCID),'You must enter valid local database name insted - ' + ISNULL(N' insted - ' + QUOTENAME(@DatabaseName),N'') ,HOST_NAME(),USER_NAME();  
+		INSERT dbo.Mng_ApplicationErrorLog(ProcedureName, ErrorMessage, HostName, LoginName, ExecutionTime, MainRunID)
+		SELECT OBJECT_NAME(@@PROCID),'You must enter valid local database name insted - ' + ISNULL(N' insted - ' + QUOTENAME(@DatabaseName),N'') ,HOST_NAME(),@LoginName,GETDATE(),@RunningID;  
 		RETURN -1;
 	END
-	DECLARE @sqlCmd NVARCHAR(max) ,
-			@prefix NVARCHAR(1000) = N'';
-	
-	IF OBJECT_ID('tempdb..#Exeption') IS NOT NULL SET @prefix = N'
-	INSERT	#Exeption';
+	DECLARE @sqlCmd NVARCHAR(max) ;
 
-	SELECT	@sqlCmd = @prefix + N'
-	SELECT  d.[name] AS DatabaseName ,
+	SELECT	@sqlCmd = N'INSERT [' + DB_NAME() + '].dbo.App_Exeption(MainRunID, DatabaseName, ObjectName, Type, ColumnName, ConstraintName, Message, URL, Severity, ErrorID)
+	SELECT	@RunningID,
+			d.[name] DatabaseName,
 			''Database '' + ( d.Name COLLATE database_default ) + '' is in '' + d.recovery_model_desc + '' recovery mode but has not had a log backup in the last week.'' ObjectName,
 			''Backup''Type,
 			NULL ColumnName,
 			NULL ConstraintName,
-			@Massege Massege,
+			@Message Message,
 			@URL_Reference URL,
-			@SeverityName' + CASE WHEN @CheckID IS NOT NULL THEN ',@CheckID' ELSE N'' END + '
+			@SeverityName Severity,
+			@CheckID
 	FROM    master.sys.databases d
 			LEFT JOIN msdb.dbo.backupset b ON d.name = b.database_name
 				AND b.type = ''L''
@@ -55,23 +55,27 @@ BEGIN
 			AND d.source_database_id IS NULL /* Excludes database snapshots */
 			AND b.backup_set_id IS NULL
 			AND d.name = @DatabaseName;';
-	
+
 	BEGIN TRY
 		EXEC sp_executesql @sqlCmd, 
 				N'@DatabaseName sysname,
-				@Massege NVARCHAR(1000),
+				@Message NVARCHAR(1000),
 				@URL_Reference VARCHAR(512),
 				@SeverityName sysname,
-				@CheckID INT',
+				@ObjectID INT,
+				@CheckID INT,
+				@RunningID INT', 
 				@DatabaseName = @DatabaseName,
-				@Massege = @Massege,
+				@Message = @Message,
 				@URL_Reference = @URL_Reference,
 				@SeverityName = @SeverityName,
-				@CheckID = @CheckID;
+				@ObjectID = @ObjectID,
+				@CheckID = @CheckID,
+				@RunningID = @RunningID;
 	END TRY
 	BEGIN CATCH
-		INSERT #Mng_ApplicationErrorLog
-		SELECT OBJECT_NAME(@@PROCID),ERROR_MESSAGE(), HOST_NAME(),USER_NAME();
+		INSERT dbo.Mng_ApplicationErrorLog(ProcedureName, ErrorMessage, HostName, LoginName, ExecutionTime, MainRunID)
+		SELECT OBJECT_NAME(@@PROCID),ERROR_MESSAGE(), HOST_NAME(),@LoginName,GETDATE(),@RunningID; 
 		RETURN -1;
 	END CATCH
 END

@@ -1,14 +1,14 @@
 ﻿-- =============================================
 -- Author:		Sharon
 -- Create date: 13/07/2017
--- Description:	
+--				26/07/2021 @LoginName sysname = NULL,@RunningID INT = NULL. Remove Temp tables
+-- Description:	Create Stored Procedure Template 
 -- =============================================
-CREATE PROCEDURE Setup.usp_CreateSPTemplate 
+CREATE PROCEDURE [Setup].[usp_CreateSPTemplate]
 	@Author sysname,
 	@Description NVARCHAR(MAX),
-	@SubjectGroup NVARCHAR(10),
 	@Subject NVARCHAR(20),
-	@Massege varchar(1000),
+	@Message varchar(1000),
 	@URL_Reference varchar(512),
 	@SubjectGroupID INT,
 	@DBVersionID INT,
@@ -17,7 +17,12 @@ CREATE PROCEDURE Setup.usp_CreateSPTemplate
 AS
 BEGIN
 	SET NOCOUNT ON;
-	DECLARE @cmd NVARCHAR(MAX);
+	EXEC sys.sp_set_session_context @key = N'IgnoreCodeSmell', @value = N'1';
+
+	DECLARE @cmd NVARCHAR(MAX),
+			@SubjectGroup NVARCHAR(25),
+			@MaxID INT,
+			@uspName sysname;
 
 	IF @Help = 1
 	BEGIN
@@ -27,21 +32,27 @@ BEGIN
 		RETURN;
 	END
 
+	SELECT	@SubjectGroup = [Subject]
+	FROM	dbo.App_SubjectGroup
+	WHERE	ID = @SubjectGroupID;
+	SELECT @uspName = CONCAT(N'usp_',REPLACE(REPLACE(REPLACE(REPLACE(@SubjectGroup,' ',''),']',''),'[',''),CHAR(13),''),'_',REPLACE(REPLACE(REPLACE(REPLACE(@Subject,' ',''),']',''),'[',''),CHAR(13),''));
 
 	SELECT @cmd = CONCAT('
 -- =============================================
--- Author:		',REPLACE(@Author,CHAR(13),''),'
--- Create date: ',CONVERT(VARCHAR(10),GETDATE()),'
+-- Author:		',REPLACE(ISNULL(@Author,SUSER_NAME()),CHAR(13),''),'
+-- Create date: ',CONVERT(VARCHAR(10),GETDATE(),121),'
 -- Update date: 
 -- Description:	',REPLACE(@Description,CHAR(13),' '),'.
 -- =============================================
-CREATE PROCEDURE [dbo].[usp_',REPLACE(REPLACE(REPLACE(@SubjectGroup,']',''),'[',''),CHAR(13),''),'_',REPLACE(REPLACE(REPLACE(@Subject,']',''),'[',''),CHAR(13),''),']
+ALTER PROCEDURE [dbo].[',@uspName,']
 	@DatabaseName sysname,
-	@Massege NVARCHAR(1000),
+	@Message NVARCHAR(1000),
 	@URL_Reference VARCHAR(512),
 	@SeverityName sysname,
 	@ObjectID INT = NULL,
-	@CheckID INT = NULL
+	@CheckID INT = NULL,
+	@LoginName sysname = NULL,
+	@RunningID INT = NULL
 AS
 BEGIN
 	SET NOCOUNT ON;
@@ -54,77 +65,80 @@ BEGIN
 
 	IF @@ROWCOUNT = 0 
 	BEGIN
-		IF OBJECT_ID(''tempdb..#Mng_ApplicationErrorLog'') IS NOT NULL  
-		INSERT #Mng_ApplicationErrorLog
-		SELECT OBJECT_NAME(@@PROCID),''You must enter valid local database name insted - '' + ISNULL(N'' insted - '' + QUOTENAME(@DatabaseName),N'''') ,HOST_NAME(),USER_NAME();  
+		INSERT dbo.Mng_ApplicationErrorLog(ProcedureName, ErrorMessage, HostName, LoginName, ExecutionTime, MainRunID)
+		SELECT OBJECT_NAME(@@PROCID),''You must enter valid local database name insted - '' + ISNULL(N'' insted - '' + QUOTENAME(@DatabaseName),N'''') ,HOST_NAME(),@LoginName,GETDATE(),@RunningID;  
 		RETURN -1;
 	END
-	DECLARE @sqlCmd NVARCHAR(MAX) ,
-			@prefix NVARCHAR(1000) = N'''';
+	DECLARE @sqlCmd NVARCHAR(max) ;
 
-	IF OBJECT_ID(''tempdb..#Exeption'') IS NOT NULL SET @prefix = N''
-	INSERT	#Exeption'';
-
-	SELECT	@sqlCmd = @prefix + N''
-	SELECT	@DatabaseName DatabaseName,
+	SELECT	@sqlCmd = N''INSERT ['' + DB_NAME() + ''].dbo.App_Exeption(MainRunID, DatabaseName, ObjectName, Type, ColumnName, ConstraintName, Message, URL, Severity, ErrorID)
+	SELECT	@RunningID,
+			@DatabaseName DatabaseName,
 			NULL ObjectName,
 			''''',@SubjectGroup,''''' Type,
 			NULL ColumnName,
 			NULL ConstraintName,
-			@Massege Massege,
+			@Message Message,
 			@URL_Reference URL,
-			@SeverityName'' + CASE WHEN @CheckID IS NOT NULL THEN '',@CheckID'' ELSE N'''' END + ''
-	FROM    '' + @DBName + N''sys.schemas;
+			@SeverityName Severity,
+			@CheckID
+	FROM    '' + @DBName + N''sys.schemas;'';
 	
 	BEGIN TRY
 		EXEC sp_executesql @sqlCmd, 
 				N''@DatabaseName sysname,
-				@Massege NVARCHAR(1000),
+				@Message NVARCHAR(1000),
 				@URL_Reference VARCHAR(512),
 				@SeverityName sysname,
 				@ObjectID INT,
-				@CheckID INT'', 
+				@CheckID INT,
+				@RunningID INT'', 
 				@DatabaseName = @DatabaseName,
-				@Massege = @Massege,
+				@Message = @Message,
 				@URL_Reference = @URL_Reference,
 				@SeverityName = @SeverityName,
 				@ObjectID = @ObjectID,
-				@CheckID = @CheckID;
+				@CheckID = @CheckID,
+				@RunningID = @RunningID;
 	END TRY
 	BEGIN CATCH
-		INSERT #Mng_ApplicationErrorLog
-		SELECT OBJECT_NAME(@@PROCID),ERROR_MESSAGE(), HOST_NAME(),USER_NAME();
+		INSERT dbo.Mng_ApplicationErrorLog(ProcedureName, ErrorMessage, HostName, LoginName, ExecutionTime, MainRunID)
+		SELECT OBJECT_NAME(@@PROCID),ERROR_MESSAGE(), HOST_NAME(),@LoginName,GETDATE(),@RunningID; 
 		RETURN -1;
 	END CATCH
 END');
-	DECLARE @MaxID INT;
-	BEGIN TRY
-		EXEC sys.sp_executesql @cmd;
 
+	IF OBJECT_ID(@uspName) IS NULL
+	BEGIN
+		BEGIN TRY
+			EXEC sys.sp_executesql @cmd;
 		
-		SELECT TOP (1) @MaxID =  ID + 1 FROM dbo.App_GeneralCheck ORDER BY ID DESC;
+			SELECT TOP (1) @MaxID =  ID + 1 FROM dbo.App_GeneralCheck ORDER BY ID DESC;
 
-		INSERT dbo.App_GeneralCheck (ID,Name,Massege,
-											IsActive,
-											URL_Reference,
-											SubjectGroupID,
-											DBVersionID,
-											SeverityID,
-											IsOnSingleObject)
-		VALUES (@MaxID,		-- ID - int
-				CONCAT('dbo.usp_',REPLACE(REPLACE(REPLACE(@SubjectGroup,']',''),'[',''),CHAR(13),''),'_',REPLACE(REPLACE(REPLACE(@Subject,']',''),'[',''),CHAR(13),'')),	-- Name - nvarchar(255)
-				@Massege,1,	-- IsActive - bit
-				@URL_Reference ,		-- URL_Reference - varchar(512)
-				@SubjectGroup,		-- SubjectGroupID - int
-				@DBVersionID,		-- DBVersionID - int
-				@SeverityID,		-- SeverityID - int
-				0	-- IsOnSingleObject - bit
-			);
+			INSERT dbo.App_GeneralCheck (ID,Name,Message,
+												IsActive,
+												URL_Reference,
+												SubjectGroupID,
+												DBVersionID,
+												SeverityID,
+												IsOnSingleObject,
+												IsOnSingleObjectOnly,
+												IsPhysicalObject)
+			SELECT	@MaxID,
+					CONCAT('dbo.',@uspName),
+					@Message,1,	
+					@URL_Reference ,
+					@SubjectGroupID,
+					@DBVersionID,
+					@SeverityID,
+					1,0,0
+			WHERE	NOT EXISTS (SELECT TOP (1) 1 FROM dbo.App_GeneralCheck WHERE Name = CONCAT('dbo.',@uspName));
 
-	END TRY
-	BEGIN CATCH
-		THROW;
-	END CATCH
+		END TRY
+		BEGIN CATCH
+			PRINT @cmd;
+			THROW;
+		END CATCH
 	
-	
+	END
 END

@@ -1,9 +1,11 @@
-﻿
-
-CREATE PROCEDURE [dbo].[usp_SQLskills_SQL2008_finddupes_helpindex]
+﻿CREATE PROCEDURE [dbo].[usp_SQLskills_SQL2008_finddupes_helpindex]
     @DatabaseName SYSNAME ,
-    @objname NVARCHAR(776)		-- the table to check for indexes
-AS --November 2010: Added a column to show if an index is disabled.
+    @objname NVARCHAR(776),		-- the table to check for indexes
+	@LoginName sysname = NULL,
+	@RunningID INT = NULL
+AS
+-- =============================================
+--November 2010: Added a column to show if an index is disabled.
 --     May 2010: Added tree/leaf columns to the output - this requires the 
 --               stored procedure: sp_SQLskills_ExposeColsInIndexLevels
 --               (Better known as sp_helpindex8)
@@ -15,66 +17,56 @@ AS --November 2010: Added a column to show if an index is disabled.
 
 -- See my blog for updates and/or additional information
 -- http://www.SQLskills.com/blogs/Kimberly (Kimberly L. Tripp)
-
-    SET nocount ON;
-    DECLARE @DBName NVARCHAR(129);
+--	26/07/2021 @LoginName sysname = NULL,@RunningID INT = NULL. Remove Temp tables
+-- =============================================
+BEGIN
+	SET NOCOUNT ON;
+	DECLARE @DBName NVARCHAR(129);
 
 	-- Local DB Only
-    SELECT  @DBName = QUOTENAME(name) + N'.'
-    FROM    sys.databases
-    WHERE   name = @DatabaseName;
+	SELECT  @DBName = QUOTENAME(name) + N'.'
+	FROM    sys.databases 
+	WHERE	name = @DatabaseName;
 
-    IF @@ROWCOUNT = 0 
-        BEGIN
-            IF OBJECT_ID('tempdb..#Mng_ApplicationErrorLog') IS NOT NULL 
-                INSERT  #Mng_ApplicationErrorLog
-                        SELECT  OBJECT_NAME(@@PROCID) ,
-                                'You must enter valid local database name insted - '
-                                + ISNULL(N' insted - '
-                                         + QUOTENAME(@DatabaseName), N'') ,
-                                HOST_NAME() ,
-                                USER_NAME();  
-            RETURN;
-        END
-
-
+	IF @@ROWCOUNT = 0 
+	BEGIN
+		INSERT dbo.Mng_ApplicationErrorLog(ProcedureName, ErrorMessage, HostName, LoginName, ExecutionTime, MainRunID)
+		SELECT OBJECT_NAME(@@PROCID),'You must enter valid local database name insted - ' + ISNULL(N' insted - ' + QUOTENAME(@DatabaseName),N'') ,HOST_NAME(),@LoginName,GETDATE(),@RunningID;  
+		RETURN -1;
+	END
     SET @objname = @DBName + @objname;
 
-    DECLARE @sqlCmd NVARCHAR(MAX) ,
-        @prefix NVARCHAR(1000) = N'';
+    DECLARE @sqlCmd NVARCHAR(MAX);
 
     DECLARE @objid INT ,			-- the object id of the table
-        @indid SMALLINT ,	-- the index id of an index
-        @groupid INT ,  		-- the filegroup id of an index
-        @indname NVARCHAR(130) ,
-        @groupname SYSNAME ,
-        @status INT ,
-        @keys NVARCHAR(2126) ,	--Length (16*max_identifierLength)+(15*2)+(16*3)
-        @inc_columns NVARCHAR(MAX) ,
-        @inc_Count SMALLINT ,
-        @loop_inc_Count SMALLINT ,
-			--@dbname	sysname,
-        @ignore_dup_key BIT ,
-        @is_unique BIT ,
-        @is_hypothetical BIT ,
-        @is_primary_key BIT ,
-        @is_unique_key BIT ,
-        @is_disabled BIT ,
-        @auto_created BIT ,
-        @no_recompute BIT ,
-        @filter_definition NVARCHAR(MAX) ,
-        @ColsInTree NVARCHAR(2126) ,
-        @ColsInLeaf NVARCHAR(MAX)
-
-
+			@indid SMALLINT ,	-- the index id of an index
+			@groupid INT ,  		-- the filegroup id of an index
+			@indname NVARCHAR(130) ,
+			@groupname SYSNAME ,
+			@status INT ,
+			@keys NVARCHAR(2126) ,	--Length (16*max_identifierLength)+(15*2)+(16*3)
+			@inc_columns NVARCHAR(MAX) ,
+			@inc_Count SMALLINT ,
+			@loop_inc_Count SMALLINT ,
+				--@dbname	sysname,
+			@ignore_dup_key BIT ,
+			@is_unique BIT ,
+			@is_hypothetical BIT ,
+			@is_primary_key BIT ,
+			@is_unique_key BIT ,
+			@is_disabled BIT ,
+			@auto_created BIT ,
+			@no_recompute BIT ,
+			@filter_definition NVARCHAR(MAX) ,
+			@ColsInTree NVARCHAR(2126) ,
+			@ColsInLeaf NVARCHAR(MAX);
 	-- Check to see the the table exists and initialize @objid.
     SELECT  @objid = OBJECT_ID(@objname)
     IF @objid IS NULL 
-        BEGIN
-            RAISERROR(15009,-1,-1,@objname,@dbname)
-            RETURN (1)
-        END
-
+    BEGIN
+        RAISERROR(15009,-1,-1,@objname,@dbname)
+        RETURN (1)
+    END
 
 	IF OBJECT_ID('tempdb..#index') IS NOT NULL DROP TABLE #index;
 	CREATE TABLE #index (
@@ -93,25 +85,23 @@ AS --November 2010: Added a column to show if an index is disabled.
 	
 	)
 	SET @sqlCmd = N'
-	INSERT #index
-	SELECT  i.index_id ,
-            i.data_space_id ,
-            QUOTENAME(i.name, N'']'') AS name ,
-            i.ignore_dup_key ,
-            i.is_unique ,
-            i.is_hypothetical ,
-            i.is_primary_key ,
-            i.is_unique_constraint ,
-            s.auto_created ,
-            s.no_recompute ,
-            i.filter_definition ,
-            i.is_disabled
-    FROM    ' + @DBName + N'sys.indexes AS i
-            INNER JOIN  ' + @DBName + N'sys.stats AS s ON i.object_id = s.object_id
-                                    AND i.index_id = s.stats_id
-    WHERE   i.object_id = @objid';
-	EXEC SP_EXECUTESQL @sqlCmd,N'@objid INT',@objid = @objid
-
+INSERT #index
+SELECT  i.index_id ,
+        i.data_space_id ,
+        QUOTENAME(i.name, N'']'') AS name ,
+        i.ignore_dup_key ,
+        i.is_unique ,
+        i.is_hypothetical ,
+        i.is_primary_key ,
+        i.is_unique_constraint ,
+        s.auto_created ,
+        s.no_recompute ,
+        i.filter_definition ,
+        i.is_disabled
+FROM    ' + @DBName + N'sys.indexes AS i
+        INNER JOIN  ' + @DBName + N'sys.stats AS s ON i.object_id = s.object_id AND i.index_id = s.stats_id
+WHERE   i.object_id = @objid';
+	EXEC sp_executesql @sqlCmd,N'@objid INT',@objid = @objid;
 
 	-- OPEN CURSOR OVER INDEXES (skip stats: bug shiloh_51196)
     DECLARE ms_crs_ind CURSOR local static
@@ -136,11 +126,11 @@ AS --November 2010: Added a column to show if an index is disabled.
 
 	-- IF NO INDEX, QUIT
     IF @@fetch_status < 0 
-        BEGIN
-            DEALLOCATE ms_crs_ind
+    BEGIN
+        DEALLOCATE ms_crs_ind;
 		--raiserror(15472,-1,-1,@objname) -- Object does not have any indexes.
-            RETURN (0)
-        END
+        RETURN (0);
+    END
 
 	-- create temp tables
     CREATE TABLE #spindtab
@@ -227,7 +217,7 @@ AS --November 2010: Added a column to show if an index is disabled.
             WHERE   ic.is_included_column = 1
                     AND ( si.index_id = @indid )
                     AND ( tbl.object_id = @objid );';
-			EXEC SP_EXECUTESQL @sqlCmd,N'@inc_Count INT OUT,@indid INT,@objid INT',@inc_Count = @inc_Count,@indid = @indid,@objid = @objid;
+			EXEC sp_executesql @sqlCmd,N'@inc_Count INT OUT,@indid INT,@objid INT',@inc_Count = @inc_Count,@indid = @indid,@objid = @objid;
 					
 
             IF @inc_Count > 0 
@@ -255,7 +245,7 @@ AS --November 2010: Added a column to show if an index is disabled.
                             WHERE   ic.is_included_column = 1
                                     AND ( si.index_id = @indid )
                                     AND ( tbl.object_id = @objid );';
-					EXEC SP_EXECUTESQL @sqlCmd,N'@inc_Count INT ,@indid INT,@objid INT',@inc_Count = @inc_Count,@indid = @indid,@objid = @objid;
+					EXEC sp_executesql @sqlCmd,N'@inc_Count INT ,@indid INT,@objid INT',@inc_Count = @inc_Count,@indid = @indid,@objid = @objid;
 			
                     SELECT  @inc_columns = QUOTENAME([Name], N']')
                     FROM    #IncludedColumns
@@ -445,3 +435,4 @@ AS --November 2010: Added a column to show if an index is disabled.
 	IF OBJECT_ID('tempdb..#indexs') IS NOT NULL DROP TABLE #indexs;
 	IF OBJECT_ID('tempdb..#index') IS NOT NULL DROP TABLE #index;
     RETURN (0) -- usp_SQLskills_SQL2008_finddupes_helpindex
+END

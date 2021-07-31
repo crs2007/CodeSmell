@@ -2,28 +2,27 @@
 -- Title:	FindMissingIndexes
 -- Author:	Brent Ozar
 -- Date:	2009-04-01 
--- Modified By: Clayton Kramer <ckramer.kramer @ gmail.com>
---				13/07/2015 @CheckID INT = NULL
--- Description: This query returns indexes that SQL Server 2005 
--- (and higher) thinks are missing since the last restart. The 
--- "Impact" column is relative to the time of last restart and how 
--- bad SQL Server needs the index. 10 million+ is high.
--- Changes: Updated to expose full table name. This makes it easier
--- to identify which database needs an index. Modified the 
--- CreateIndexStatement to use the full table path and include the
--- equality/inequality columns for easier identifcation.
--- Update date: 24/08/2014 @ObjectID INT
+-- Description: This query returns indexes that SQL Server 2005 (and higher) thinks are missing since the last restart. The 
+--		"Impact" column is relative to the time of last restart and how bad SQL Server needs the index. 10 million+ is high.
+--		Changes: Updated to expose full table name. This makes it easier to identify which database needs an index. Modified the 
+--		CreateIndexStatement to use the full table path and include the equality/inequality columns for easier identifcation.
+-- Update date: 13/07/2015 Clayton Kramer <ckramer.kramer @ gmail.com> @CheckID INT = NULL
+--				24/08/2014 @ObjectID INT
+--				09/11/2020, sharonr change OBJECTPROPERTY(o.OBJECT_ID, 'isusertable') = 1 <TO>  AND o.type_desc = ''USER_TABLE''
+--				26/07/2021 @LoginName sysname = NULL,@RunningID INT = NULL. Remove Temp tables
+------------------------------------------------------------------
  */
 CREATE PROCEDURE [dbo].[usp_Index_FindMissingIndex]
 	@DatabaseName sysname,
-	@Massege NVARCHAR(1000),
+	@Message NVARCHAR(1000),
 	@URL_Reference VARCHAR(512),
 	@SeverityName sysname,
 	@ObjectID INT = NULL,
-	@CheckID INT = NULL
+	@CheckID INT = NULL,
+	@LoginName sysname = NULL,
+	@RunningID INT = NULL
 AS
 BEGIN
-	SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
 	SET NOCOUNT ON;
 	DECLARE @DBName NVARCHAR(129);
 
@@ -34,20 +33,16 @@ BEGIN
 
 	IF @@ROWCOUNT = 0 
 	BEGIN
-		IF OBJECT_ID('tempdb..#Mng_ApplicationErrorLog') IS NOT NULL  
-		INSERT #Mng_ApplicationErrorLog
-		SELECT OBJECT_NAME(@@PROCID),'You must enter valid local database name insted - ' + ISNULL(N' insted - ' + QUOTENAME(@DatabaseName),N'') ,HOST_NAME(),USER_NAME();  
+		INSERT dbo.Mng_ApplicationErrorLog(ProcedureName, ErrorMessage, HostName, LoginName, ExecutionTime, MainRunID)
+		SELECT OBJECT_NAME(@@PROCID),'You must enter valid local database name insted - ' + ISNULL(N' insted - ' + QUOTENAME(@DatabaseName),N'') ,HOST_NAME(),@LoginName,GETDATE(),@RunningID;  
 		RETURN -1;
 	END
-	DECLARE @sqlCmd NVARCHAR(max) ,
-			@prefix NVARCHAR(1000) = N'';
+	DECLARE @sqlCmd NVARCHAR(MAX) ;
 
-	IF OBJECT_ID('tempdb..#Exeption') IS NOT NULL SET @prefix = N'
-	INSERT	#Exeption';
-
-	SELECT	@sqlCmd = @prefix + N'
-	SELECT	@DatabaseName DatabaseName,
-			OBJECT_SCHEMA_NAME(o.object_id,DB_ID(''' + @DBName + N''')) + ''.'' + o.name ObjectName,
+	SELECT	@sqlCmd = N'INSERT [' + DB_NAME() + '].dbo.App_Exeption(MainRunID, DatabaseName, ObjectName, Type, ColumnName, ConstraintName, Message, URL, Severity, ErrorID)
+	SELECT	DISTINCT @RunningID,
+			@DatabaseName DatabaseName,
+			ISNULL(OBJECT_SCHEMA_NAME(o.object_id,DB_ID(''' + @DBName + N''')),''dbo'') + ''.'' + o.name ObjectName,
 			''Index'' Type,
 			ISNULL(''Equality: '' + mid.equality_columns,'''') + ISNULL(''Inequality: '' + mid.inequality_columns,'''') + ISNULL('' included: '' + mid.included_columns,'''') ColumnName,
 			''/* Impact: '' + CONVERT(VARCHAR,( avg_total_user_cost * avg_user_impact ) * ( user_seeks + user_scans )) + '' */ CREATE NONCLUSTERED INDEX IX_'' 
@@ -60,40 +55,41 @@ BEGIN
 			+ mid.inequality_columns END + '' ) '' 
 			+ CASE WHEN mid.included_columns IS NULL THEN '''' ELSE ''INCLUDE ('' + mid.included_columns + '')'' END 
 			+ '';'' ConstraintName,
-			@Massege Massege,
+			@Message Message,
 			@URL_Reference URL,
-			@SeverityName' + CASE WHEN @CheckID IS NOT NULL THEN ',@CheckID' ELSE N'' END + '
+			@SeverityName Severity,
+			@CheckID
 	FROM    ' + @DBName + N'sys.dm_db_missing_index_group_stats AS migs
 			INNER JOIN ' + @DBName + N'sys.dm_db_missing_index_groups AS mig ON migs.group_handle = mig.index_group_handle
 			INNER JOIN ' + @DBName + N'sys.dm_db_missing_index_details AS mid ON mig.index_handle = mid.index_handle
 			INNER JOIN ' + @DBName + N'sys.objects o WITH (NOLOCK) ON mid.OBJECT_ID = o.OBJECT_ID
 	WHERE   ( migs.group_handle IN (
-			  SELECT TOP ( 500 )
-						group_handle
+			  SELECT TOP ( 500 ) group_handle
 			  FROM      ' + @DBName + N'sys.dm_db_missing_index_group_stats WITH ( NOLOCK )
-			  ORDER BY  ( avg_total_user_cost * avg_user_impact ) * ( user_seeks
-																  + user_scans ) DESC ) )
-			AND OBJECTPROPERTY(o.OBJECT_ID, ''isusertable'') = 1
-	ORDER BY ( avg_total_user_cost * avg_user_impact ) * ( user_seeks + user_scans ) DESC;';
-	
+			  ORDER BY  ( avg_total_user_cost * avg_user_impact ) * ( user_seeks + user_scans ) DESC ) )
+			AND o.type_desc = ''USER_TABLE''
+	--ORDER BY ( avg_total_user_cost * avg_user_impact ) * ( user_seeks + user_scans ) DESC;';
+
 	BEGIN TRY
 		EXEC sp_executesql @sqlCmd, 
 				N'@DatabaseName sysname,
-				@Massege NVARCHAR(1000),
+				@Message NVARCHAR(1000),
 				@URL_Reference VARCHAR(512),
 				@SeverityName sysname,
 				@ObjectID INT,
-				@CheckID INT', 
+				@CheckID INT,
+				@RunningID INT', 
 				@DatabaseName = @DatabaseName,
-				@Massege = @Massege,
+				@Message = @Message,
 				@URL_Reference = @URL_Reference,
 				@SeverityName = @SeverityName,
 				@ObjectID = @ObjectID,
-				@CheckID = @CheckID;
+				@CheckID = @CheckID,
+				@RunningID = @RunningID;
 	END TRY
 	BEGIN CATCH
-		INSERT #Mng_ApplicationErrorLog
-		SELECT OBJECT_NAME(@@PROCID),ERROR_MESSAGE(), HOST_NAME(),USER_NAME();
+		INSERT dbo.Mng_ApplicationErrorLog(ProcedureName, ErrorMessage, HostName, LoginName, ExecutionTime, MainRunID)
+		SELECT OBJECT_NAME(@@PROCID),ERROR_MESSAGE(), HOST_NAME(),@LoginName,GETDATE(),@RunningID; 
 		RETURN -1;
 	END CATCH
 END

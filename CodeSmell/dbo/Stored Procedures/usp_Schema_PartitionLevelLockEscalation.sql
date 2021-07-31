@@ -1,16 +1,18 @@
 ﻿-- =============================================
 -- Author:		Sharon
 -- Create date: 12/07/2018
--- Update date: 
+-- Update date: 26/07/2021 @LoginName sysname = NULL,@RunningID INT = NULL. Remove Temp tables
 -- Description:	Finding a default object Lock Escalationas on Partition table.
 -- =============================================
 CREATE PROCEDURE [dbo].[usp_Schema_PartitionLevelLockEscalation]
 	@DatabaseName sysname,
-	@Massege NVARCHAR(1000),
+	@Message NVARCHAR(1000),
 	@URL_Reference VARCHAR(512),
 	@SeverityName sysname,
 	@ObjectID INT = NULL,
-	@CheckID INT = NULL
+	@CheckID INT = NULL,
+	@LoginName sysname = NULL,
+	@RunningID INT = NULL
 AS
 BEGIN
 	SET NOCOUNT ON;
@@ -23,57 +25,49 @@ BEGIN
 
 	IF @@ROWCOUNT = 0 
 	BEGIN
-		IF OBJECT_ID('tempdb..#Mng_ApplicationErrorLog') IS NOT NULL
-		INSERT #Mng_ApplicationErrorLog
-		SELECT OBJECT_NAME(@@PROCID),'You must enter valid local database name insted - ' + ISNULL(N' insted - ' + QUOTENAME(@DatabaseName),N'') ,HOST_NAME(),USER_NAME();  
+		INSERT dbo.Mng_ApplicationErrorLog(ProcedureName, ErrorMessage, HostName, LoginName, ExecutionTime, MainRunID)
+		SELECT OBJECT_NAME(@@PROCID),'You must enter valid local database name insted - ' + ISNULL(N' insted - ' + QUOTENAME(@DatabaseName),N'') ,HOST_NAME(),@LoginName,GETDATE(),@RunningID;  
 		RETURN -1;
 	END
-	DECLARE @sqlCmd NVARCHAR(max) ,
-			@prefix NVARCHAR(1000) = N'';
+	DECLARE @sqlCmd NVARCHAR(MAX) ;
 
-	IF OBJECT_ID('tempdb..#Exeption') IS NOT NULL SET @prefix = N'
-	INSERT	#Exeption';
-
-	SELECT	@sqlCmd = @prefix + N'
-	SELECT	DISTINCT
+	SELECT	@sqlCmd = N'INSERT [' + DB_NAME() + '].dbo.App_Exeption(MainRunID, DatabaseName, ObjectName, Type, ColumnName, ConstraintName, Message, URL, Severity, ErrorID)
+	SELECT	DISTINCT @RunningID,
 			@DatabaseName DatabaseName,
 			s.name + ''.'' + t.name ObjectName,
 			''Schema'' Type,
 			NULL ColumnName,
 			CONCAT(''ALTER TABLE '',QUOTENAME(s.name),''.'',QUOTENAME(t.name),'' SET (LOCK_ESCALATION = AUTO);'') AS ConstraintName,
-			@Massege Massege,
+			@Message Message,
 			@URL_Reference URL,
-			@SeverityName' + CASE WHEN @CheckID IS NOT NULL THEN ',@CheckID' ELSE N'' END + ' Severity
+			@SeverityName Severity,
+			@CheckID
 	FROM	' + @DBName + N'sys.partitions		  p
 			INNER JOIN ' + @DBName + N'sys.tables t ON p.object_id = t.object_id
 			INNER JOIN ' + @DBName + N'sys.schemas s ON s.schema_id = t.schema_id
 	WHERE	p.partition_number != 1
 			AND lock_escalation != 2;';
-	
+
 	BEGIN TRY
 		EXEC sp_executesql @sqlCmd, 
 				N'@DatabaseName sysname,
-				@Massege NVARCHAR(1000),
+				@Message NVARCHAR(1000),
 				@URL_Reference VARCHAR(512),
 				@SeverityName sysname,
 				@ObjectID INT,
-				@CheckID INT', 
+				@CheckID INT,
+				@RunningID INT', 
 				@DatabaseName = @DatabaseName,
-				@Massege = @Massege,
+				@Message = @Message,
 				@URL_Reference = @URL_Reference,
 				@SeverityName = @SeverityName,
 				@ObjectID = @ObjectID,
-				@CheckID = @CheckID;
+				@CheckID = @CheckID,
+				@RunningID = @RunningID;
 	END TRY
 	BEGIN CATCH
-		IF OBJECT_ID('tempdb..#Mng_ApplicationErrorLog') IS NOT NULL
-			INSERT #Mng_ApplicationErrorLog
-			SELECT OBJECT_NAME(@@PROCID),ERROR_MESSAGE(), HOST_NAME(),USER_NAME();
-		ELSE
-		BEGIN
-			PRINT @sqlCmd;
-			SELECT OBJECT_NAME(@@PROCID),ERROR_MESSAGE(), HOST_NAME(),USER_NAME();
-		END
+		INSERT dbo.Mng_ApplicationErrorLog(ProcedureName, ErrorMessage, HostName, LoginName, ExecutionTime, MainRunID)
+		SELECT OBJECT_NAME(@@PROCID),ERROR_MESSAGE(), HOST_NAME(),@LoginName,GETDATE(),@RunningID; 
 		RETURN -1;
 	END CATCH
 END

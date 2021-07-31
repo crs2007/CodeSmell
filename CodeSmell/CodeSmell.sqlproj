@@ -76,6 +76,8 @@
     <Folder Include="dbo\User Defined Types\" />
     <Folder Include="Assemblies\" />
     <Folder Include="Security\" />
+    <Folder Include="Util\" />
+    <Folder Include="Util\Stored Procedures\" />
   </ItemGroup>
   <ItemGroup>
     <Build Include="dbo\Tables\Setup_GlobleParameter.sql" />
@@ -142,14 +144,12 @@
     <Build Include="dbo\Stored Procedures\usp_Database_LOGFileSize.sql" />
     <Build Include="dbo\Stored Procedures\usp_Database_LastLogBackup.sql" />
     <Build Include="dbo\Stored Procedures\usp_Database_LastBackup.sql" />
-    <Build Include="dbo\Stored Procedures\usp_Database_DateOnProcHeader.sql" />
     <Build Include="dbo\Stored Procedures\usp_Database_CollationMismatchTempDB.sql" />
     <Build Include="dbo\Stored Procedures\usp_Database_CollationMismatch.sql" />
     <Build Include="dbo\Stored Procedures\usp_Database_CheckDB.sql" />
     <Build Include="dbo\Stored Procedures\usp_Database_BackupLocation.sql" />
     <Build Include="dbo\Stored Procedures\usp_Bug_dm_db_index_usage_stats.sql" />
     <Build Include="dbo\Stored Procedures\usp_App_RunValidationCheckOnSP.sql" />
-    <Build Include="dbo\Stored Procedures\usp_App_RunCheck2.sql" />
     <Build Include="dbo\Stored Procedures\usp_App_RunCheck.sql" />
     <Build Include="dbo\Stored Procedures\ups_msdb_DeleteMailHistory.sql" />
     <Build Include="dbo\Stored Procedures\ups_msdb_DeleteJobHistory.sql" />
@@ -171,6 +171,30 @@
     <Build Include="Security\History.sql" />
     <Build Include="Security\Check.sql" />
     <Build Include="Security\Background.sql" />
+    <Build Include="dbo\Tables\TriggerEvent.sql" />
+    <Build Include="dbo\Tables\Setup_Players.sql" />
+    <Build Include="dbo\Tables\App_IgnoreList.sql" />
+    <Build Include="dbo\Tables\App_Exeption.sql" />
+    <Build Include="dbo\Tables\App_CodeType.sql" />
+    <Build Include="Setup\Stored Procedures\usp_Monitor_CheckServerObject.sql" />
+    <Build Include="Setup\Stored Procedures\usp_Help.sql" />
+    <Build Include="Setup\Stored Procedures\usp_CreateServerTrigger.sql" />
+    <Build Include="History\Stored Procedures\usp_SetCleanUp.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Schema_FindPreviousModifications.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Schema_FindMissingExecutePermissions.sql" />
+    <Build Include="dbo\Stored Procedures\usp_Schema_FindMissingCommentFromToday.sql" />
+    <Build Include="dbo\Stored Procedures\usp_DesignStandards_ThreePartNames.sql" />
+    <Build Include="dbo\Stored Procedures\usp_DesignStandard_UseOfIdentity.sql" />
+    <Build Include="dbo\Stored Procedures\usp_DesignStandard_UnusedPartition.sql" />
+    <Build Include="dbo\Stored Procedures\usp_DesignStandard_MissingGDPRSuportMasking.sql" />
+    <Build Include="dbo\Stored Procedures\usp_DesignStandard_MissingGDPRSuportEncryptionOriginalDataType.sql" />
+    <Build Include="dbo\Stored Procedures\usp_App_TestSP_SupposedToFail.sql">
+      <QuotedIdentifier>Off</QuotedIdentifier>
+    </Build>
+    <Build Include="dbo\Stored Procedures\usp_App_RunCheck_Object.sql" />
+    <Build Include="Util\Stored Procedures\USP_SendMail.sql" />
+    <Build Include="Util\Stored Procedures\USP_TableToHTML.sql" />
+    <Build Include="Security\Util.sql" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Assemblies\CodeSmallesCLR.dll" />

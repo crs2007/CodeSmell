@@ -3,15 +3,18 @@
 -- Create date: 22/12/2013
 -- Update date: 24/08/2014 @ObjectID INT
 --				13/07/2015 @CheckID INT = NULL
+--				26/07/2021 @LoginName sysname = NULL,@RunningID INT = NULL. Remove Temp tables
 -- Description:	Invalid PK Name
 -- =============================================
 CREATE PROCEDURE [dbo].[usp_DesignStandard_InvalidPKName]
 	@DatabaseName sysname,
-	@Massege NVARCHAR(1000),
+	@Message NVARCHAR(1000),
 	@URL_Reference VARCHAR(512),
 	@SeverityName sysname,
 	@ObjectID INT = NULL,
-	@CheckID INT = NULL
+	@CheckID INT = NULL,
+	@LoginName sysname = NULL,
+	@RunningID INT = NULL
 AS
 BEGIN
 	SET NOCOUNT ON;
@@ -24,26 +27,23 @@ BEGIN
 
 	IF @@ROWCOUNT = 0 
 	BEGIN
-		IF OBJECT_ID('tempdb..#Mng_ApplicationErrorLog') IS NOT NULL
-		INSERT #Mng_ApplicationErrorLog
-		SELECT OBJECT_NAME(@@PROCID),'You must enter valid local database name insted - ' + ISNULL(N' insted - ' + QUOTENAME(@DatabaseName),N'') ,HOST_NAME(),USER_NAME();  
+		INSERT dbo.Mng_ApplicationErrorLog(ProcedureName, ErrorMessage, HostName, LoginName, ExecutionTime, MainRunID)
+		SELECT OBJECT_NAME(@@PROCID),'You must enter valid local database name insted - ' + ISNULL(N' insted - ' + QUOTENAME(@DatabaseName),N'') ,HOST_NAME(),@LoginName,GETDATE(),@RunningID;  
 		RETURN -1;
 	END
-	DECLARE @sqlCmd NVARCHAR(max) ,
-			@prefix NVARCHAR(1000) = N'';
+	DECLARE @sqlCmd NVARCHAR(MAX) ;
 
-	IF OBJECT_ID('tempdb..#Exeption') IS NOT NULL SET @prefix = N'
-	INSERT	#Exeption';
-
-	SELECT	@sqlCmd = @prefix + N'
-	SELECT	@DatabaseName DatabaseName,
+	SELECT	@sqlCmd = N'INSERT [' + DB_NAME() + '].dbo.App_Exeption(MainRunID, DatabaseName, ObjectName, Type, ColumnName, ConstraintName, Message, URL, Severity, ErrorID)
+	SELECT	DISTINCT @RunningID,
+			@DatabaseName DatabaseName,
 			OBJECT_SCHEMA_NAME(C.parent_object_id,DB_ID(''' + @DatabaseName + ''')) + ''.'' + OBJECT_NAME(C.parent_object_id,DB_ID(''' + @DatabaseName + ''')) ObjectName,
 			''DesignStandard'' Type,
 			''PK_'' + OBJECT_NAME(C.parent_object_id,DB_ID(''' + @DatabaseName + ''')) + '' - Required PK Name'' ColumnName,
 			c.name + '' - Current PK Name'' ConstraintName,
-			@Massege Massege,
+			@Message Message,
 			@URL_Reference URL,
-			@SeverityName' + CASE WHEN @CheckID IS NOT NULL THEN ',@CheckID' ELSE N'' END + '
+			@SeverityName Severity,
+			@CheckID
 			--''EXEC sys.sp_rename  @objname = N'''''' + OBJECT_SCHEMA_NAME(parent_object_id) + ''.'' + name + '''''', @newname = N''''PK_'' + OBJECT_NAME(parent_object_id) + '''''', @objtype = ''''OBJECT'''''' Script
 	FROM	' + @DBName + N'sys.key_constraints C
 	WHERE   C.name <> ''PK_'' + OBJECT_NAME(C.parent_object_id,DB_ID(''' + @DatabaseName + '''))
@@ -59,32 +59,27 @@ BEGIN
 							''MSpeer_conflictdetectionconfigrequest'',''MSpeer_lsns'',''sysreplservers'',''systranschemas'',''sysdiagrams''
 							);
 			';
-	
+
 	BEGIN TRY
 		EXEC sp_executesql @sqlCmd, 
 				N'@DatabaseName sysname,
-				@Massege NVARCHAR(1000),
+				@Message NVARCHAR(1000),
 				@URL_Reference VARCHAR(512),
 				@SeverityName sysname,
 				@ObjectID INT,
-				@CheckID INT', 
+				@CheckID INT,
+				@RunningID INT', 
 				@DatabaseName = @DatabaseName,
-				@Massege = @Massege,
+				@Message = @Message,
 				@URL_Reference = @URL_Reference,
 				@SeverityName = @SeverityName,
 				@ObjectID = @ObjectID,
-				@CheckID = @CheckID;
+				@CheckID = @CheckID,
+				@RunningID = @RunningID;
 	END TRY
 	BEGIN CATCH
-		IF OBJECT_ID('tempdb..#Mng_ApplicationErrorLog') IS NOT NULL
-			INSERT #Mng_ApplicationErrorLog
-			SELECT OBJECT_NAME(@@PROCID),ERROR_MESSAGE(), HOST_NAME(),USER_NAME();
-		ELSE
-		BEGIN
-			PRINT @sqlCmd;
-			SELECT OBJECT_NAME(@@PROCID),ERROR_MESSAGE(), HOST_NAME(),USER_NAME();
-		END
-			
+		INSERT dbo.Mng_ApplicationErrorLog(ProcedureName, ErrorMessage, HostName, LoginName, ExecutionTime, MainRunID)
+		SELECT OBJECT_NAME(@@PROCID),ERROR_MESSAGE(), HOST_NAME(),@LoginName,GETDATE(),@RunningID; 
 		RETURN -1;
 	END CATCH
 END

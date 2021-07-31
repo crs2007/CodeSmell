@@ -1,17 +1,18 @@
-﻿
--- =============================================
+﻿-- =============================================
 -- Author:		Sharon
 -- Create date: 09/07/2018
--- Update date: 
+-- Update date: 28/07/2021 @LoginName sysname = NULL,@RunningID INT = NULL. Remove Temp tables
 -- Description:	Finding a Non-Compiling Object.
 -- =============================================
 CREATE PROCEDURE [dbo].[usp_Schema_FindNonCompileObject]
 	@DatabaseName sysname,
-	@Massege NVARCHAR(1000),
+	@Message NVARCHAR(1000),
 	@URL_Reference VARCHAR(512),
 	@SeverityName sysname,
 	@ObjectID INT = NULL,
-	@CheckID INT = NULL
+	@CheckID INT = NULL,
+	@LoginName sysname = NULL,
+	@RunningID INT = NULL
 AS
 BEGIN
 	SET NOCOUNT ON;
@@ -21,20 +22,15 @@ BEGIN
 	SELECT  @DBName = QUOTENAME(name) + N'.'
 	FROM    sys.databases 
 	WHERE	name = @DatabaseName;
-
+	
 	IF @@ROWCOUNT = 0 
 	BEGIN
-		IF OBJECT_ID('tempdb..#Mng_ApplicationErrorLog') IS NOT NULL  
-		INSERT #Mng_ApplicationErrorLog
-		SELECT OBJECT_NAME(@@PROCID),'You must enter valid local database name insted - ' + ISNULL(N' insted - ' + QUOTENAME(@DatabaseName),N'') ,HOST_NAME(),USER_NAME();  
+		INSERT dbo.Mng_ApplicationErrorLog(ProcedureName, ErrorMessage, HostName, LoginName, ExecutionTime, MainRunID)
+		SELECT OBJECT_NAME(@@PROCID),'You must enter valid local database name insted - ' + ISNULL(N' insted - ' + QUOTENAME(@DatabaseName),N'') ,HOST_NAME(),@LoginName,GETDATE(),@RunningID;  
 		RETURN -1;
 	END
-	DECLARE @sqlCmd NVARCHAR(MAX) ,
-			@prefix NVARCHAR(1000) = N'';
-
-	IF OBJECT_ID('tempdb..#Exeption') IS NOT NULL SET @prefix = N'
-	INSERT	#Exeption';
-	
+	DECLARE @sqlCmd NVARCHAR(MAX) ;
+		
 	CREATE TABLE #DBObj(ObjectName NVARCHAR(512) NOT NULL,type_desc sysname NOT NULL);
 	DECLARE @Name NVARCHAR(1000);
 	DECLARE @Sqltype sysname;
@@ -77,36 +73,17 @@ EXEC sp_refreshsqlmodule ''' + @Name + '''';
 					RAISERROR('Failed', 16, 1);
 			END TRY
 			BEGIN CATCH
-				--PRINT 'The module ' + @Sqltype + ' ''' + @Name + ''' does not compile.';
-				
-				SELECT	@sqlCmd = @prefix + N'
-				SELECT	@DatabaseName DatabaseName,
+				INSERT dbo.App_Exeption(MainRunID, DatabaseName, ObjectName, Type, ColumnName, ConstraintName, Message, URL, Severity, ErrorID)
+				SELECT	@RunningID,
+						@DatabaseName DatabaseName,
 						@Name ObjectName,
 						@Sqltype Type,
 						NULL ColumnName,
 						NULL ConstraintName,
-						REPLACE(REPLACE(@Massege,''$DATA_TYPE$'',@Sqltype),''$OBJECT_NAME$'',@Name) Massege,
+						REPLACE(REPLACE(@Message,'$DATA_TYPE$',@Sqltype),'$OBJECT_NAME$',@Name) Message,
 						@URL_Reference URL,
-						@SeverityName' + CASE WHEN @CheckID IS NOT NULL THEN ',@CheckID' ELSE N'' END + ' Severity';
-
-				
-				EXEC sp_executesql @sqlCmd, 
-						N'@DatabaseName sysname,
-						@Massege NVARCHAR(1000),
-						@URL_Reference VARCHAR(512),
-						@SeverityName sysname,
-						@ObjectID INT,
-						@CheckID INT,
-						@Name NVARCHAR(1000),
-						@Sqltype sysname', 
-						@DatabaseName = @DatabaseName,
-						@Massege = @Massege,
-						@URL_Reference = @URL_Reference,
-						@SeverityName = @SeverityName,
-						@ObjectID = @ObjectID,
-						@CheckID = @CheckID,
-						@Name = @Name,
-						@Sqltype = @Sqltype;
+						@SeverityName Severity,
+						@CheckID;
 			END CATCH;
 
 			FETCH NEXT FROM ObjectCursor INTO @Name,@Sqltype;
@@ -116,14 +93,8 @@ EXEC sp_refreshsqlmodule ''' + @Name + '''';
 		DEALLOCATE ObjectCursor;
 	END TRY
 	BEGIN CATCH
-		IF OBJECT_ID('tempdb..#Mng_ApplicationErrorLog') IS NOT NULL
-			INSERT #Mng_ApplicationErrorLog
-			SELECT OBJECT_NAME(@@PROCID),ERROR_MESSAGE(), HOST_NAME(),USER_NAME();
-		ELSE
-		BEGIN
-			PRINT @sqlCmd;
-			SELECT OBJECT_NAME(@@PROCID),ERROR_MESSAGE(), HOST_NAME(),USER_NAME();
-		END
+		INSERT dbo.Mng_ApplicationErrorLog(ProcedureName, ErrorMessage, HostName, LoginName, ExecutionTime, MainRunID)
+		SELECT OBJECT_NAME(@@PROCID),ERROR_MESSAGE(), HOST_NAME(),@LoginName,GETDATE(),@RunningID; 
 		RETURN -1;
 	END CATCH
 END

@@ -807,7 +807,10 @@ DECLARE @BlockSize INT
 
 		DELETE FROM @output
 		WHERE	LINE IS NULL
-				OR line IN ('','BlockSize  Caption                                            ')
+				OR line IN ('
+','BlockSize  Caption                                            
+')
+
 		IF OBJECT_ID('tempdb..#DriveLeter') IS NOT NULL DROP TABLE #DriveLeter
 		CREATE TABLE #DriveLeter (DriveLeter CHAR(3) NOT NULL)
 

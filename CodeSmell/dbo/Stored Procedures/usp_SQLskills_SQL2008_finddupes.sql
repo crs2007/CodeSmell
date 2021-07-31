@@ -3,53 +3,49 @@
 -- Create date: <Create Date,,>
 -- Update date: 24/08/2014 @ObjectID INT
 --				13/07/2015 @CheckID INT = NULL
+--				26/07/2021 @LoginName sysname = NULL,@RunningID INT = NULL. Remove Temp tables
 -- Description:	See my blog for updates and/or additional information
 --				http://www.SQLskills.com/blogs/Kimberly (Kimberly L. Tripp)
 -- =============================================
 CREATE PROCEDURE [dbo].[usp_SQLskills_SQL2008_finddupes]
-(
-    @DatabaseName SYSNAME ,
-    @Massege NVARCHAR(1000) ,
-    @URL_Reference VARCHAR(512),
+	@DatabaseName sysname,
+	@Message NVARCHAR(1000),
+	@URL_Reference VARCHAR(512),
 	@SeverityName sysname,
 	@ObjectID INT = NULL,
-	@CheckID INT = NULL
-)
-AS --  Jul 2011: V1 to find duplicate indexes.
+	@CheckID INT = NULL,
+	@LoginName sysname = NULL,
+	@RunningID INT = NULL
+AS
 BEGIN
-    SET NOCOUNT ON;
-    DECLARE @DBName NVARCHAR(129);
+	SET NOCOUNT ON;
+	DECLARE @DBName NVARCHAR(129);
+
+	-- Local DB Only
+	SELECT  @DBName = QUOTENAME(name) + N'.'
+	FROM    sys.databases 
+	WHERE	name = @DatabaseName;
+
+	IF @@ROWCOUNT = 0 
+	BEGIN
+		INSERT dbo.Mng_ApplicationErrorLog(ProcedureName, ErrorMessage, HostName, LoginName, ExecutionTime, MainRunID)
+		SELECT OBJECT_NAME(@@PROCID),'You must enter valid local database name insted - ' + ISNULL(N' insted - ' + QUOTENAME(@DatabaseName),N'') ,HOST_NAME(),@LoginName,GETDATE(),@RunningID;  
+		RETURN -1;
+	END
+    IF @DatabaseName = N'tempdb' 
+    BEGIN
+		INSERT dbo.Mng_ApplicationErrorLog(ProcedureName, ErrorMessage, HostName, LoginName, ExecutionTime, MainRunID)
+		SELECT OBJECT_NAME(@@PROCID),'WARNING: This procedure cannot be run against tempdb. Skipping tempdb.',HOST_NAME(),@LoginName,GETDATE(),@RunningID;  
+		RETURN -1;
+    END
+	DECLARE @sqlCmd NVARCHAR(MAX) ;
 
     DECLARE @ObjID INT ,			-- the object id of the table
 			@ObjName NVARCHAR(776) = NULL ,		-- the table to check for duplicates
 												-- when NULL it will check ALL tables
 			@SchemaName SYSNAME ,
 			@TableName SYSNAME ,
-			@ExecStr NVARCHAR(4000)
-
-	-- Local DB Only
-    SELECT  @DBName = QUOTENAME(name) + N'.'
-    FROM    sys.databases
-    WHERE   name = @DatabaseName;
-
-    IF @@ROWCOUNT = 0 
-    BEGIN
-        IF OBJECT_ID('tempdb..#Mng_ApplicationErrorLog') IS NOT NULL 
-            INSERT  #Mng_ApplicationErrorLog
-                    SELECT  OBJECT_NAME(@@PROCID) ,
-                            'You must enter valid local database name insted - '
-                            + ISNULL(N' insted - '
-                                        + QUOTENAME(@DatabaseName), N'') ,
-                            HOST_NAME() ,
-                            USER_NAME();  
-        RETURN -1;
-    END
-    
-    IF @DatabaseName = N'tempdb' 
-    BEGIN
-        RAISERROR('WARNING: This procedure cannot be run against tempdb. Skipping tempdb.', 10, 0)
-        RETURN (1);
-    END
+			@ExecStr NVARCHAR(4000);
 
 -- Check to see the the table exists and initialize @ObjID.
     SELECT  @SchemaName = PARSENAME(@ObjName, 2)
@@ -69,7 +65,6 @@ BEGIN
                     RETURN (1)
                 END
         END
-
 
     CREATE TABLE #DropIndexes
         (
@@ -91,10 +86,7 @@ BEGIN
           filter_definition NVARCHAR(MAX) ,
           columns_in_tree NVARCHAR(2126) ,
           columns_in_leaf NVARCHAR(MAX)
-        )
-
-    DECLARE @sqlCmd NVARCHAR(MAX) ,
-			@prefix NVARCHAR(1000) = N'';
+        );
 
     CREATE TABLE #obj
         (
@@ -108,9 +100,7 @@ SELECT  OBJECT_SCHEMA_NAME(id,DB_ID(@DatabaseName)) ,
 FROM    ' + @DBName + 'sys.sysobjects
 WHERE   type = ''U''';
 	--PRINT @sqlCmd;
-    EXEC sys.sp_executesql @sqlCmd, N'@DatabaseName sysname',
-        @DatabaseName = @DatabaseName
-
+    EXEC sys.sp_executesql @sqlCmd, N'@DatabaseName sysname', @DatabaseName = @DatabaseName
 
 -- OPEN CURSOR OVER TABLE(S)
     DECLARE TableCursor CURSOR LOCAL STATIC
@@ -130,95 +120,74 @@ WHERE   type = ''U''';
 -- the info in a temporary table that we'll print out at the end.
 
     WHILE @@fetch_status >= 0 
-        BEGIN
-            TRUNCATE TABLE #FindDupes
-    
-            SELECT  @ExecStr = 'EXEC dbo.usp_SQLskills_SQL2008_finddupes_helpindex  ''' + @DatabaseName + ''', '''
-                    + QUOTENAME(@SchemaName) + N'.' + QUOTENAME(@TableName)
-                    + N''''
-
-    --SELECT @ExecStr
-
-            INSERT  #FindDupes
-            EXEC (@ExecStr)	
-    
-    --SELECT * FROM #FindDupes
+    BEGIN
+        TRUNCATE TABLE #FindDupes;
+        SELECT  @ExecStr = 'EXEC dbo.usp_SQLskills_SQL2008_finddupes_helpindex  ''' + @DatabaseName + ''', '''
+                + QUOTENAME(@SchemaName) + N'.' + QUOTENAME(@TableName)
+                + N''',@LoginName,@RunningID;';
 	
-            INSERT  #DropIndexes
-                    SELECT DISTINCT
-                            @DatabaseName ,
-                            @SchemaName ,
-                            @TableName ,
-                            t1.index_name ,
-                            N'DROP INDEX ' + QUOTENAME(@SchemaName, N']')
-                            + N'.' + QUOTENAME(@TableName, N']') + N'.'
-                            + t1.index_name
-                    FROM    #FindDupes AS t1
-                            JOIN #FindDupes AS t2 ON t1.columns_in_tree = t2.columns_in_tree
-                                                     AND t1.columns_in_leaf = t2.columns_in_leaf
-                                                     AND ISNULL(t1.filter_definition,
-                                                              1) = ISNULL(t2.filter_definition,
-                                                              1)
-                                                     AND PATINDEX('%unique%',
-                                                              t1.index_description) = PATINDEX('%unique%',
-                                                              t2.index_description)
-                                                     AND t1.index_id > t2.index_id
+		--SELECT @ExecStr
+        INSERT  #FindDupes
+        EXEC sys.sp_executesql @ExecStr,N'@LoginName sysname,@RunningID INT',@LoginName = @LoginName, @RunningID = @RunningID;
+		--SELECT * FROM #FindDupes
+        INSERT  #DropIndexes
+        SELECT DISTINCT
+                @DatabaseName ,
+                @SchemaName ,
+                @TableName ,
+                t1.index_name ,
+                N'DROP INDEX ' + QUOTENAME(@SchemaName, N']')
+                + N'.' + QUOTENAME(@TableName, N']') + N'.'
+                + t1.index_name
+        FROM    #FindDupes AS t1
+                INNER JOIN #FindDupes AS t2 ON t1.columns_in_tree = t2.columns_in_tree
+                                            AND t1.columns_in_leaf = t2.columns_in_leaf
+                                            AND ISNULL(t1.filter_definition,1) = ISNULL(t2.filter_definition,1)
+                                            AND PATINDEX('%unique%',
+                                                    t1.index_description) = PATINDEX('%unique%',
+                                                    t2.index_description)
+                                            AND t1.index_id > t2.index_id;
                 
-            FETCH TableCursor
-        INTO @SchemaName, @TableName
-        END
+        FETCH TableCursor INTO @SchemaName, @TableName;
+    END
 	
-    DEALLOCATE TableCursor
+    DEALLOCATE TableCursor;
 
--- DISPLAY THE RESULTS
-	IF OBJECT_ID('tempdb..#Exeption') IS NOT NULL SET @prefix = N'
-	INSERT	#Exeption';
-	--
-	SELECT	@sqlCmd = @prefix + N'
-	SELECT	DatabaseName DatabaseName,
+	-- DISPLAY THE RESULTS
+	SELECT	@sqlCmd = N'INSERT [' + DB_NAME() + '].dbo.App_Exeption(MainRunID, DatabaseName, ObjectName, Type, ColumnName, ConstraintName, Message, URL, Severity, ErrorID)
+	SELECT	DISTINCT @RunningID,
+			@DatabaseName DatabaseName,
 			SchemaName + N''.'' + TableName ObjectName,
 			''Index'' Type,
 			IndexName ColumnName,
 			DropStatement ConstraintName,
-			@Massege Massege,
+			@Message Message,
 			@URL_Reference URL,
-			@SeverityName' + CASE WHEN @CheckID IS NOT NULL THEN ',@CheckID' ELSE N'' END + '
+			@SeverityName Severity,
+			@CheckID
 	FROM	#DropIndexes;';
-	
+
 	BEGIN TRY
 		EXEC sp_executesql @sqlCmd, 
 				N'@DatabaseName sysname,
-				@Massege NVARCHAR(1000),
+				@Message NVARCHAR(1000),
 				@URL_Reference VARCHAR(512),
 				@SeverityName sysname,
 				@ObjectID INT,
-				@CheckID INT', 
+				@CheckID INT,
+				@RunningID INT', 
 				@DatabaseName = @DatabaseName,
-				@Massege = @Massege,
+				@Message = @Message,
 				@URL_Reference = @URL_Reference,
 				@SeverityName = @SeverityName,
 				@ObjectID = @ObjectID,
-				@CheckID = @CheckID;
+				@CheckID = @CheckID,
+				@RunningID = @RunningID;
 	END TRY
 	BEGIN CATCH
-		INSERT #Mng_ApplicationErrorLog
-		SELECT OBJECT_NAME(@@PROCID),ERROR_MESSAGE(), HOST_NAME(),USER_NAME();
+		INSERT dbo.Mng_ApplicationErrorLog(ProcedureName, ErrorMessage, HostName, LoginName, ExecutionTime, MainRunID)
+		SELECT OBJECT_NAME(@@PROCID),ERROR_MESSAGE(), HOST_NAME(),@LoginName,GETDATE(),@RunningID; 
 		RETURN -1;
 	END CATCH
-  
-    
-    --IF ( SELECT COUNT(*)
-    --     FROM   #DropIndexes
-    --   ) = 0 
-    --    RAISERROR('Database: %s has NO duplicate indexes.', 10, 0, @DatabaseName)
-    --ELSE 
-    --    SELECT  *
-    --    FROM    #DropIndexes
-    --    ORDER BY SchemaName ,
-    --            TableName
-
-    --IF OBJECT_ID('tempdb..#obj') IS NOT NULL 
-    --    DROP TABLE #obj;
-    --RETURN (0) -- sp_SQLskills_SQL2008_finddupes
 
 END

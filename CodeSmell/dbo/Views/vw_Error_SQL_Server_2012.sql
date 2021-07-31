@@ -1,9 +1,7 @@
-﻿
-
-CREATE VIEW [dbo].[vw_Error_SQL_Server_2012] AS
+﻿CREATE VIEW [dbo].[vw_Error_SQL_Server_2012] AS
 	SELECT	E.ID ,
 			E.Name ,
-			E.Massege ,
+			E.Message ,
 			E.URL_Reference ,
 			E.IsCheckOnProcName,
 			RP.Regex,
@@ -17,7 +15,7 @@ CREATE VIEW [dbo].[vw_Error_SQL_Server_2012] AS
 	UNION ALL 
 	SELECT	ID ,
 	        Name ,
-	        Massege ,
+	        Message ,
 	        URL_Reference ,
 	        NULL IsCheckOnProcName,
 			NULL Regex,

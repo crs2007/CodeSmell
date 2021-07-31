@@ -1,9 +1,9 @@
 ﻿-- =============================================
--- Author:		<Author,,Name>
+-- Author:		sharonr
 -- Create date: <Create Date,,>
 -- Description:	<Description,,>
 -- =============================================
-CREATE PROCEDURE History.usp_GetLastRunningDetail
+CREATE PROCEDURE [History].[usp_GetLastRunningDetail]
 	@DatabaseName sysname
 AS
 BEGIN
@@ -30,7 +30,7 @@ BEGIN
                                  DR.Type ,
                                  DR.ColumnName ,
                                  DR.ConstraintName ,
-                                 DR.Massege ,
+                                 DR.Message ,
                                  DR.URL ,
                                  DR.Severity,
 								 DR.ErrorID--,IL.*
