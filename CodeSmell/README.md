@@ -137,7 +137,7 @@ EXEC [CodeSmell].[dbo].[usp_App_RunCheck_Object] @I_DataBaseName = @I_DataBaseNa
 												 @I_EndDate = @I_EndDate,
 												 @I_ObjectName = @I_ObjectName,
 												 @I_Debug = 0;
- GO
+GO
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -194,7 +194,7 @@ ENABLE TRIGGER [str_CodeSmell_PObjectChange] ON ALL SERVER
 GO
 ```
 
-###Flow:
+### Flow:
 * SQL Server Triggers – to activate the process
 - **str_CodeSmell_ObjectChange**: at any - CREATE_PROCEDURE, ALTER_PROCEDURE, CREATE_TRIGGER, ALTER_TRIGGER, CREATE_FUNCTION, ALTER_FUNCTION - Call to: **dbo.usp_App_RunValidationCheckOnSP**
 - **str_CodeSmell_PObjectChange**: at any -  CREATE_TABLE - Call to: **dbo.usp_App_RunCheck_Object**
