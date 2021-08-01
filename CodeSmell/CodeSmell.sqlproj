@@ -201,6 +201,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="Assemblies\CodeSmallesCLR.dll" />
+    <None Include="README.md" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="CodeSmallesCLR">
