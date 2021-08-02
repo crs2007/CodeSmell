@@ -34,6 +34,10 @@ EXECUTE [CodeSmell].[dbo].[usp_App_RunCheck] @I_DataBaseName = 'WideWorldImporte
                                  @O_SQLCMDError = @O_SQLCMDError OUTPUT;
 IF @O_SQLCMDError IS NOT NULL SELECT @O_SQLCMDError [@O_SQLCMDError];
 ```
+### Execute for server hard coded defiend checks:
+```sql
+EXECUTE [CodeSmell].[Server].[usp_App_RunCheck];
+```
 
 ### Execute per alter\create of code object(procedure, function, trigger):
 ```sql
