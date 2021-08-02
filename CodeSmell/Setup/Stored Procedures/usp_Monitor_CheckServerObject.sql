@@ -16,7 +16,7 @@ BEGIN
 	DECLARE @I_body VARCHAR(MAX) = CONCAT(N'Server : ', @@SERVERNAME, '<br>
 MachineName:', CONVERT(VARCHAR(250), SERVERPROPERTY('MachineName')), '<br>
 ComputerNamePhysicalNetBIOS :', CONVERT(VARCHAR(250), SERVERPROPERTY('ComputerNamePhysicalNetBIOS')), '<br>');
-	DECLARE @I_Recipients VARCHAR(MAX) = 'PlatformDBAUnit@users.888holdings.com;';
+	DECLARE @I_Recipients VARCHAR(MAX) = '<PutYourOwn>;';
 	DECLARE @I_IsHTMLFormat BIT = 1;
 	DECLARE @I_IsHighImportance BIT = 0;
 	

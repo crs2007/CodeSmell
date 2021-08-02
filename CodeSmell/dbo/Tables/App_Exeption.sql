@@ -8,8 +8,11 @@
     [Message]        NVARCHAR (2000) NULL,
     [URL]            VARCHAR (512)   NULL,
     [Severity]       [sysname]       NULL,
-    [ErrorID]        INT             NULL
+    [ErrorID]        INT             NULL,
+    [Action]         VARCHAR (MAX)   NULL
 );
+
+
 
 
 GO

@@ -8,19 +8,12 @@ CREATE PROCEDURE [Server].[usp_App_RunCheck]
 AS
 BEGIN
 	SET NOCOUNT ON;
-	DECLARE @CPU_Core INT 
-	IF OBJECT_ID('tempdb..#Exeption') IS NOT NULL DROP TABLE #Exeption;
+	--Cleanup
+	DELETE FROM dbo.App_Exeption WHERE MainRunID = -1;
+
+	DECLARE @CPU_Core INT;
 	DECLARE @output TABLE ( line VARCHAR(255) );
 	DECLARE @sql VARCHAR(400)
-	-- Collecte all errors from checks.
-	CREATE TABLE #Exeption (
-		ServerName sysname COLLATE SQL_Latin1_General_CP1_CI_AS,
-		Type NVARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS,
-		Message NVARCHAR(4000) COLLATE SQL_Latin1_General_CP1_CI_AS,
-		URL VARCHAR(512) COLLATE SQL_Latin1_General_CP1_CI_AS,
-		Severity sysname COLLATE SQL_Latin1_General_CP1_CI_AS,
-		Action NVARCHAR(4000) COLLATE SQL_Latin1_General_CP1_CI_AS
-	);
 
 	-- Get VLF Counts for all databases on the instance (Query 25) (VLF Counts)
 	-- (adapted from Michelle Ufford) 
@@ -41,11 +34,10 @@ BEGIN
 					FROM #VLFInfo; 
 
 					TRUNCATE TABLE #VLFInfo;'
-	INSERT	#Exeption
-	SELECT  @@SERVERNAME ServerName,
+	INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message, Severity, Action)
+	SELECT  -1,DatabaseName,
 			'Database' Type,
 			'High VLF counts can affect write performance and they can make database restores and recovery take much longer. ' + DatabaseName + '(VLF:' + CONVERT(VARCHAR(10),VLFCount ) + ')' Message,
-			NULL URL,
 			'Minor' Severity,
 			'Try to keep your VLF counts under 200 in most cases' Action  
 	FROM	#VLFCountResults
@@ -74,8 +66,8 @@ BEGIN
 		IF @logicalCPU <= 4
 		BEGIN
 			IF @maxWorkerThreads NOT IN (0,512)
-				INSERT	#Exeption
-				SELECT  @@SERVERNAME ServerName,
+				INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message,URL, Severity, Action)
+				SELECT  -1,@@SERVERNAME ServerName,
 						'CPU' Type,
 						'Max worker threads:' + CONVERT(VARCHAR(10), @maxWorkerThreads) Message ,
 						'http://blogs.msdn.com/b/sqlsakthi/archive/2011/03/14/max-worker-threads-and-when-you-should-change-it.aspx' URL,
@@ -85,8 +77,8 @@ BEGIN
 		ELSE
 		BEGIN
 			IF @maxWorkerThreads NOT IN (0,256 + ((@logicalCPU - 4) * 16))
-				INSERT	#Exeption
-				SELECT  @@SERVERNAME ServerName,
+				INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message,URL, Severity, Action)
+				SELECT  -1,@@SERVERNAME ServerName,
 						'CPU' Type,
 						'Max worker threads:' + CONVERT(VARCHAR(10), @maxWorkerThreads) Message ,
 						'http://blogs.msdn.com/b/sqlsakthi/archive/2011/03/14/max-worker-threads-and-when-you-should-change-it.aspx' URL,
@@ -99,8 +91,8 @@ BEGIN
 		IF @logicalCPU <= 4
 		BEGIN
 			IF @maxWorkerThreads NOT IN (0,256)
-				INSERT	#Exeption
-				SELECT  @@SERVERNAME ServerName,
+				INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message,URL, Severity, Action)
+				SELECT  -1,@@SERVERNAME ServerName,
 						'CPU' Type,
 						'Max worker threads:' + CONVERT(VARCHAR(10), @maxWorkerThreads) Message ,
 						'http://blogs.msdn.com/b/sqlsakthi/archive/2011/03/14/max-worker-threads-and-when-you-should-change-it.aspx' URL,
@@ -110,8 +102,8 @@ BEGIN
 		ELSE
 		BEGIN
 			IF @maxWorkerThreads NOT IN (0,256 + ((@logicalCPU - 4) * 8))
-				INSERT	#Exeption
-				SELECT  @@SERVERNAME ServerName,
+				INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message,URL, Severity, Action)
+				SELECT  -1,@@SERVERNAME ServerName,
 						'CPU' Type,
 						'Max worker threads:' + CONVERT(VARCHAR(10), @maxWorkerThreads) Message ,
 						'http://blogs.msdn.com/b/sqlsakthi/archive/2011/03/14/max-worker-threads-and-when-you-should-change-it.aspx' URL,
@@ -127,13 +119,13 @@ BEGIN
 	--EXEC xp_readerrorlog 0, 1, "Manufacturer";
 
 	--SELECT TOP 1 1 FROM #Manufacturer WHERE Text LIKE '%VMware%'
-	IF EXISTS(SELECT TOP 1 1 FROM sys.dm_os_sys_info WHERE virtual_machine_type = 1) /*HYPERVISOR*/
+	IF EXISTS(SELECT TOP(1) 1 FROM sys.dm_os_sys_info WHERE virtual_machine_type = 1) /*HYPERVISOR*/
 	BEGIN
 		SELECT	@CPU_Core = cpu_count/hyperthread_ratio
 		FROM	sys.dm_os_sys_info WITH (NOLOCK);
 
-		INSERT	#Exeption
-		SELECT  @@SERVERNAME ServerName,
+		INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message,URL, Severity, Action)
+		SELECT  -1,@@SERVERNAME ServerName,
 				'CPU' Type,
 				'CPU resources ratio of the physical cores is 1:' + CONVERT(VARCHAR(10), cpu_count / hyperthread_ratio) Message ,
 				'http://www.vmware.com/files/pdf/solutions/SQL_Server_on_VMware-Best_Practices_Guide.pdf' URL,
@@ -171,14 +163,13 @@ BEGIN
 				@ThreadStack INT,
 				@vCPU INT,
 				@PhysicalMemory INT,
-				@VMOverhead INT
+				@VMOverhead INT;
 
-		IF OBJECT_ID('[Tempdb].[dbo].[#_XPMSVER]') IS NOT NULL DROP TABLE [dbo].[#_XPMSVER]
-		CREATE TABLE [dbo].[#_XPMSVER]([IDX] [int] NULL
+		DECLARE @XPMSVER TABLE ([IDX] [int] NULL
 		,[NAME] [varchar](100) COLLATE SQL_Latin1_General_CP1_CI_AS NULL
 		,[INT_VALUE] [float] NULL
-		,[C_VALUE] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL) ON [PRIMARY]
-		INSERT INTO [#_XPMSVER]
+		,[C_VALUE] [varchar](128) COLLATE SQL_Latin1_General_CP1_CI_AS NULL);
+		INSERT INTO @XPMSVER
 		EXEC( 'master.dbo.xp_msver');
 
 		DECLARE @PlatformType INT;
@@ -186,7 +177,7 @@ BEGIN
 									 WHEN C_VALUE LIKE '%x64%' THEN 2
 									 WHEN C_VALUE LIKE '%IA64%' THEN 4
 				END
-		FROM	[#_XPMSVER]
+		FROM	@XPMSVER
 		WHERE	name = 'Platform'
 		OPTION(RECOMPILE);
 
@@ -206,8 +197,8 @@ BEGIN
 					AND @PhysicalMemory BETWEEN VM_Memory_MB_From AND VM_Memory_MB_Till
 			OPTION(RECOMPILE);
 
-			INSERT	#Exeption
-			SELECT  @@SERVERNAME ServerName,
+			INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message,URL, Severity, Action)
+			SELECT  -1,@@SERVERNAME ServerName,
 					'Memory' Type,
 					'Minimum Memory For This VM is ' + CONVERT(VARCHAR(50),@PhysicalMemory ) + 'MB and does not meet VM requirements: ' + CONVERT(VARCHAR(50),(CONVERT(BIGINT,value)) + @ThreadStack + @OS_Mem + @VMOverhead ) Message,
 					'http://www.vmware.com/files/pdf/solutions/SQL_Server_on_VMware-Best_Practices_Guide.pdf' URL,
@@ -222,11 +213,10 @@ BEGIN
 	END
 
 	-- Memory
-	INSERT	#Exeption
-	SELECT  @@SERVERNAME ServerName,
+	INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message, Severity, Action)
+	SELECT  -1,@@SERVERNAME ServerName,
 			'Memory' Type,
 			'Max server memory configure worng ' + CONVERT(varchar(25),C.value) + 'MB. Physical memory: ' + CONVERT(varchar(25),I.physical_memory_kb/1024) + 'MB. You should leave about 10-12% for OS.' Message,
-			NULL URL,
 			'Minor' Severity,
 			'Configure max server memory' Action 
 	FROM	sys.configurations C WITH (NOLOCK)
@@ -256,57 +246,51 @@ NOTES:
  sys.dm_os_performance_counters. Originally written on December 29, 2012 
  by Akhamie Patrick
 *******************************************************************************/ 
-
-
 DECLARE @counter INT --This will be used to iterate the sampling loop for the PLE measure. 
 SET @counter = 0 
-CREATE TABLE #pleSample
+DECLARE @pleSample TABLE 
     (
       CaptureTime DATETIME ,
       PageLifeExpectancy BIGINT
-    ) 
+    );
 WHILE @counter < 30 --Sampling will run approximately 1 minute. 
 BEGIN 
 --Captures Page Life Expectancy from sys.dm_os_performance_counters 
-    INSERT  INTO #pleSample
-            ( CaptureTime ,
-                PageLifeExpectancy 
- 	        )
-            SELECT  CURRENT_TIMESTAMP ,
-                    cntr_value
-            FROM    sys.dm_os_performance_counters
-            WHERE   [object_name] = N'SQLServer:Buffer Manager'
-                    AND counter_name = N'Page life expectancy'
-			OPTION(RECOMPILE);
+    INSERT @pleSample(CaptureTime, PageLifeExpectancy)
+    SELECT  CURRENT_TIMESTAMP ,
+            cntr_value
+    FROM    sys.dm_os_performance_counters
+    WHERE   [object_name] = N'SQLServer:Buffer Manager'
+            AND counter_name = N'Page life expectancy'
+	OPTION(RECOMPILE);
     SET @counter = @counter + 1 
-    WAITFOR DELAY '000:00:02'
+    WAITFOR DELAY '00:00:00.2';
 END 
-IF OBJECT_ID('tempdb..#PLE') IS NOT NULL DROP TABLE #PLE
+
+DECLARE @PLE TABLE([AveragePageLifeExpectancy] BIGINT);
 --This query will return the average PLE based on a 1 minute sample. 
+INSERT @PLE(AveragePageLifeExpectancy)
 SELECT  AVG(PageLifeExpectancy) AS [AveragePageLifeExpectancy]
-INTO	#PLE
-FROM    #pleSample 
+FROM    @pleSample 
 IF OBJECT_ID('tempdb..#pleSample') IS NOT NULL DROP TABLE #pleSample
 
-	INSERT	#Exeption
-	SELECT  @@SERVERNAME ServerName ,
+	INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message, Severity, Action)
+	SELECT  -1,@@SERVERNAME ServerName ,
 			'Memory' Type ,
 			'Page life expectancy(PLE) is to low - '
 			+ CONVERT(VARCHAR(25), [AveragePageLifeExpectancy]) + 'sec. Physical memory: '
 			+ CONVERT(VARCHAR(25), @PhysicalMemory) + 'MB' Message ,
-			NULL URL ,
 			'Minor' Severity ,
 			'PLE is a good measurement of memory pressure. Higher PLE is better. Watch the trend, not the absolute value.' Action 
-	FROM    #PLE
+	FROM    @PLE
 			CROSS APPLY (	SELECT	CONVERT(INT,CASE WHEN CONVERT(INT,C.value)/1024.0 < (I.physical_memory_kb/1024.0/1024.0) THEN ((CONVERT(INT,C.value)/1024.0)/4) * 300 ELSE ((I.physical_memory_kb/1024.0/1024.0)/4) * 300 END )PLEvalue
 								FROM	sys.configurations C WITH (NOLOCK) CROSS JOIN sys.dm_os_sys_info I WITH (NOLOCK)
 								WHERE	C.name = 'max server memory (MB)')T
 	WHERE   [AveragePageLifeExpectancy] < t.PLEvalue -- Seconds
 	OPTION (RECOMPILE);
 
-	IF OBJECT_ID('tempdb..#PLE') IS NOT NULL DROP TABLE #PLE;
-	INSERT	#Exeption
-	SELECT  @@SERVERNAME ServerName,
+	INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message,URL, Severity, Action)
+	SELECT  -1,@@SERVERNAME ServerName,
 			'Memory' Type,
 			'"MAX_EVENTS_LIMIT" on XE is set to high(' + CONVERT(VARCHAR(15),ring_buffer_event_count)+ ')' Message,
 			'http://www.sqlskills.com/blogs/jonathan/why-i-hate-the-ring_buffer-target-in-extended-events/?utm_source=rss&utm_medium=rss&utm_campaign=why-i-hate-the-ring_buffer-target-in-extended-events' URL,
@@ -328,31 +312,28 @@ IF OBJECT_ID('tempdb..#pleSample') IS NOT NULL DROP TABLE #pleSample
 
 ----------------------------- Server ---------------------------------
 	--Service
-	INSERT	#Exeption
-	SELECT  @@SERVERNAME ServerName,
+	INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message, Severity, Action)
+	SELECT  -1 MainRunID,@@SERVERNAME ServerName,
 			'Server' Type,
 			servicename + ' startup state: ' + startup_type_desc Message,
-			NULL URL,
 			'Major' Severity,
 			'Change service startup methud to Automatic' ACTION
 	FROM    sys.dm_server_services WITH ( NOLOCK )
 	WHERE   servicename LIKE 'SQL Server%'
 			AND startup_type != 2 --Automatic
 	UNION ALL 
-	SELECT  @@SERVERNAME ServerName,
+	SELECT  -1,@@SERVERNAME ServerName,
 			'Server' Type,
 			servicename + ' is in state: ' + status_desc Message,
-			NULL URL,
 			'Major' Severity,
 			'Start Service' Action 
 	FROM    sys.dm_server_services WITH ( NOLOCK )
 	WHERE   servicename LIKE 'SQL Server%'
 			AND status != 4 --Running
 	UNION ALL 
-	SELECT  @@SERVERNAME ServerName,
+	SELECT  -1,@@SERVERNAME ServerName,
 			'Server' Type,
 			servicename + ' service account is differnt from agent service' Message,
-			NULL URL,
 			'Major' Severity,
 			'Change Service account of agent service to ' + s.service_account Action 
 	FROM    sys.dm_server_services s WITH ( NOLOCK )
@@ -364,11 +345,10 @@ IF OBJECT_ID('tempdb..#pleSample') IS NOT NULL DROP TABLE #pleSample
 	OPTION  ( RECOMPILE );
 	
 	--configurations
-	INSERT	#Exeption
-	SELECT  @@SERVERNAME ServerName,
+	INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message, Severity, Action)
+	SELECT  -1,@@SERVERNAME ServerName,
 			'Server' Type,
 			CONVERT(varchar(40),C.Name) + ' configure worng ' Message,
-			NULL URL,
 			'Worning' Severity,
 			'Turn on - ' + CONVERT(varchar(25),C.Name) Action 
 	FROM	sys.configurations C WITH (NOLOCK)
@@ -376,11 +356,10 @@ IF OBJECT_ID('tempdb..#pleSample') IS NOT NULL DROP TABLE #pleSample
 			AND C.value = 0
 	OPTION  ( RECOMPILE );
 
-	INSERT	#Exeption
-	SELECT	@@SERVERNAME ServerName,
+	INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message, Severity, Action)
+	SELECT	-1,@@SERVERNAME ServerName,
 			'Server' Type,
 			CONVERT(varchar(40),C.Name) + ' value(' + CONVERT(varchar(25),C.value) + ') !=  value_in_use(' + CONVERT(varchar(25),C.value_in_use) + ')' Message,
-			NULL URL,
 			'Worning' Severity,
 			'Turn on - ' + CONVERT(varchar(25),C.Name) Action 
 	FROM	sys.configurations C
@@ -402,16 +381,15 @@ IF OBJECT_ID('tempdb..#pleSample') IS NOT NULL DROP TABLE #pleSample
 --Author: Shimon Gibraltar
 --Email: shimongb@gmail.com
 *********************************/
-IF OBJECT_ID('tempdb..#syslogin') IS NOT NULL DROP TABLE #syslogin;
+DECLARE @syslogin TABLE(NAME sysname COLLATE SQL_Latin1_General_CP1_CI_AS,Header VARBINARY(4),Salt VARBINARY(4),password_hash VARBINARY(256));
 --Collect sql logins data
+INSERT @syslogin(NAME, Header, Salt, password_hash)
 SELECT  NAME  COLLATE SQL_Latin1_General_CP1_CI_AS [NAME],
         SUBSTRING(password_hash, 0, 3) Header ,
         CONVERT(VARBINARY(4), SUBSTRING(CONVERT(NVARCHAR(MAX), password_hash),2, 2)) Salt ,
         password_hash
-INTO    #syslogin
 FROM    sys.sql_logins WITH (NOLOCK)
 OPTION(RECOMPILE);
-
 
 --define the crypto algoritms to check
 DECLARE @alg TABLE(Algoritm NVARCHAR(10) NOT NULL)
@@ -420,12 +398,11 @@ VALUES  --( 'MD2' ),( 'MD4' ),( 'MD5' ), -- Only for 2005 todo
 ( 'SHA' ),( 'SHA1' ),( 'SHA2_256' ),( 'SHA2_512' );
 
 -->>> ••••• and this is where the magic happens! ••••• <<<---
-	INSERT	#Exeption
-	SELECT	DISTINCT
+	INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message, Severity, Action)
+	SELECT	DISTINCT -1,
 			@@SERVERNAME ServerName,
 			'Server' Type,
 			'Login ' + t.NAME + ' has a weak password.' Message,
-			'' URL,
 			'Worning' Severity,
 			'Change password for login - ' + t.Name Action 
         --t.Name ,
@@ -442,25 +419,22 @@ VALUES  --( 'MD2' ),( 'MD4' ),( 'MD5' ), -- Only for 2005 todo
 														+ CONVERT(NVARCHAR(MAX), sl.Salt)) MyHashedPassword ,
 						CONVERT(VARBINARY(4), SUBSTRING(CONVERT(NVARCHAR(MAX), sl.password_hash),
 														2, 2)) salt
-			  FROM      #syslogin SL
+			  FROM      @syslogin SL
 						CROSS JOIN @alg A
 						CROSS JOIN (SELECT	[Password]
 									FROM	[Server].[Passwords] P 
 									UNION ALL 
 									SELECT	name  [Password]
-									FROM	#syslogin
+									FROM	@syslogin
 									)P
 			) t
 	WHERE   t.MyHashedPassword = t.OriginalPasswordHash;
-
---cleaning up
-IF OBJECT_ID('tempdb..#syslogin') IS NOT NULL DROP TABLE #syslogin;
 -------------------------------------------------------------------------------------------
 
 	
 	--TempDB Configuration
-	INSERT	#Exeption
-	SELECT  TOP 1
+	INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message,URL, Severity, Action)
+	SELECT  TOP (1) -1,
 			@@SERVERNAME ServerName,
 			'Server' Type,
 			'TempDB files has different sizes' Message,
@@ -474,7 +448,7 @@ IF OBJECT_ID('tempdb..#syslogin') IS NOT NULL DROP TABLE #syslogin;
 			AND iMF.file_id != MF.file_id
 			AND iMF.size != MF.size
 	UNION ALL 
-	SELECT  TOP 1
+	SELECT  TOP (1) -1,
 			@@SERVERNAME ServerName,
 			'Server' Type,
 			'TempDB files are lower then logical CPU count' Message,
@@ -485,25 +459,24 @@ IF OBJECT_ID('tempdb..#syslogin') IS NOT NULL DROP TABLE #syslogin;
 			CROSS APPLY (SELECT	COUNT_BIG(1) TempDBcnt FROM	sys.master_files WITH (NOLOCK) WHERE	database_id = 2 AND type = 0) Tmp
 	WHERE	cpu_count > Tmp.TempDBcnt
 
-	CREATE TABLE #xp_cmdshell_output (Output VARCHAR (8000));
-	INSERT INTO #xp_cmdshell_output EXEC ('xp_cmdshell "whoami /priv"');
+	DECLARE @xp_cmdshell_output TABLE(Output VARCHAR (8000));
+	INSERT INTO @xp_cmdshell_output EXEC ('xp_cmdshell "whoami /priv"');
 
-	INSERT	#Exeption
-	SELECT  @@SERVERNAME ServerName,
+	INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message,URL, Severity, Action)
+	SELECT  -1,@@SERVERNAME ServerName,
 			'Server' Type,
 			'Instant Initialization disabled' Message,
 			N'http://www.sqlskills.com/blogs/kimberly/instant-initialization-what-why-and-how/' URL,
 			'Worning' Severity,
 			'Activate Instant Initialization'  Action 
-	WHERE	NOT EXISTS (SELECT * FROM #xp_cmdshell_output WHERE Output LIKE '%SeManageVolumePrivilege%' and Output LIKE '%Enabled%')
+	WHERE	NOT EXISTS (SELECT * FROM @xp_cmdshell_output WHERE Output LIKE '%SeManageVolumePrivilege%' and Output LIKE '%Enabled%')
 
 	-- Sustained values above 10 suggest further investigation in that area
 	-- High Avg Task Counts are often caused by blocking or other resource contention
-	INSERT	#Exeption
-	SELECT  @@SERVERNAME ServerName,
+	INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message, Severity, Action)
+	SELECT  -1,@@SERVERNAME ServerName,
 			'Server' Type,
 			'Avg Task Count ' + CONVERT(varchar(25),AVG(current_tasks_count)) Message,
-			NULL URL,
 			'Worning' Severity,
 			'High Avg Task Counts are often caused by blocking or other resource contention'  Action 
 	FROM    sys.dm_os_schedulers WITH ( NOLOCK )
@@ -511,10 +484,9 @@ IF OBJECT_ID('tempdb..#syslogin') IS NOT NULL DROP TABLE #syslogin;
 	HAVING AVG(current_tasks_count) > 10
 	UNION ALL 
 	-- High Avg Runnable Task Counts are a good sign of CPU pressure
-	SELECT  @@SERVERNAME ServerName,
+	SELECT  -1,@@SERVERNAME ServerName,
 			'CPU' Type,
 			'Avg Runnable Task Count ' + CONVERT(varchar(25),AVG(runnable_tasks_count)) Message,
-			NULL URL,
 			'Worning' Severity,
 			'High Avg Runnable Task Counts are a good sign of CPU pressure'  Action 
 	FROM    sys.dm_os_schedulers WITH ( NOLOCK )
@@ -522,41 +494,38 @@ IF OBJECT_ID('tempdb..#syslogin') IS NOT NULL DROP TABLE #syslogin;
 	HAVING AVG(runnable_tasks_count) > 10
 	UNION ALL 
 	-- High Avg Pending DiskIO Counts are a sign of disk pressure
-	SELECT  @@SERVERNAME ServerName,
+	SELECT  -1,@@SERVERNAME ServerName,
 			'CPU' Type,
 			'Avg Pending DiskIO Count ' + CONVERT(varchar(25),AVG(pending_disk_io_count)) Message,
-			NULL URL,
 			'Worning' Severity,
 			'High Avg Pending DiskIO Counts are a sign of disk pressure'  Action 
 	FROM    sys.dm_os_schedulers WITH ( NOLOCK )
 	WHERE   scheduler_id < 255
 	HAVING AVG(pending_disk_io_count) > 10
 	-- High Avg Pending DiskIO Counts are a sign of disk pressure
-	SELECT  @@SERVERNAME ServerName,
+	INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message, Severity, Action)
+	SELECT  -1,@@SERVERNAME ServerName,
 			'LinkedServer' Type,
 			'The LinkedServer is configured to work with IP address. On DR based IP This will not work automaticly.' Message,
-			NULL URL,
 			'Worning' Severity,
 			'Change IP connection to Name based'  Action 
-	FROM    SYS.SERVERS
+	FROM    sys.servers
 	WHERE	[dbo].[ufn_Util_clr_RegexIsMatch] (data_source,'^\d*\.\d*\.\d*\.\d*',0) = 1
 	OPTION  ( RECOMPILE );
 	----------------------------------------  TraceFlags  ----------------------------------------
-    IF OBJECT_ID('tempdb..#TraceStatus') IS NOT NULL DROP TABLE #TraceStatus;
-    CREATE TABLE #TraceStatus
+    DECLARE @TraceStatus TABLE
     (
         TraceFlag VARCHAR(10) COLLATE SQL_Latin1_General_CP1_CI_AS,
         status BIT ,
         Global BIT ,
         Session BIT
     );
-    INSERT  INTO #TraceStatus EXEC ( ' DBCC TRACESTATUS(-1) WITH NO_INFOMSGS')
+    INSERT @TraceStatus EXEC ( ' DBCC TRACESTATUS(-1) WITH NO_INFOMSGS')
 	----------------------------------------  TraceFlags  ----------------------------------------
-	INSERT	#Exeption
-	SELECT  @@SERVERNAME ServerName,
+	INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message, Severity, Action)
+	SELECT  -1,@@SERVERNAME ServerName,
 			'Server' Type,
 			TS.Name Message,
-			NULL URL,
 			'Minor' Severity,
 			'Turn Trace flag on' Action 
 	FROM	(SELECT 'Is TF 1118(Immediately allocate an extent (8 pages)) On' Name,'1118' value --http://www.sqlskills.com/blogs/paul/misconceptions-around-tf-1118/
@@ -571,20 +540,19 @@ IF OBJECT_ID('tempdb..#syslogin') IS NOT NULL DROP TABLE #syslogin;
 			UNION ALL 
 			SELECT 'Is TF 2453 (Fix optimizer on table variable row est) On' Name,'2453' value WHERE SERVERPROPERTY('ProductVersion') >= '11.0.5058' -- Applay only for 2012 SP2 & above
 			) TS
-			LEFT JOIN #TraceStatus GTS ON GTS.TraceFlag = TS.value
-	WHERE	GTS.TraceFlag IS NULL
+			LEFT JOIN @TraceStatus GTS ON GTS.TraceFlag = TS.value
+	WHERE	GTS.TraceFlag IS NULL;
 	
 	--Error Log file
 	DECLARE @NumErrorLogs INT;
 	EXEC master.dbo.xp_instance_regread N'HKEY_LOCAL_MACHINE',
 		N'Software\Microsoft\MSSQLServer\MSSQLServer', N'NumErrorLogs',
-		@NumErrorLogs OUTPUT
+		@NumErrorLogs OUTPUT;
 
-	INSERT	#Exeption
-	SELECT  @@SERVERNAME ServerName,
+	INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message, Severity, Action)
+	SELECT  -1,@@SERVERNAME ServerName,
 			'Server' Type,
 			'Number of Error Logs is -' + CONVERT(VARCHAR(10),ISNULL(@NumErrorLogs, -1))+ '. Change to 30 or more.' Message,
-			NULL URL,
 			'Minor' Severity,
 			'/*Configure SQL Server Error Logs*/USE [master]
 GO
@@ -594,13 +562,11 @@ EXEC xp_instance_regwrite N''HKEY_LOCAL_MACHINE'',
 GO' Action 
 	WHERE	ISNULL(@NumErrorLogs, -1) < 30;
 
-	INSERT	#Exeption
-	SELECT  @@SERVERNAME ServerName,
+	INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message, Severity)
+	SELECT  -1,@@SERVERNAME ServerName,
 			'JOB' Type,
 			'JobName: ' + JobName + ' That run on ' + CONVERT(VARCHAR(25),RunDateTime) + ' took - ' + CONVERT(VARCHAR(25),RunDurationMinutes) + ' minutes' Message,
-			NULL URL,
-			'Minor' Severity,
-			NULL Action 
+			'Minor' Severity
 	FROM	(SELECT  j.name AS 'JobName' ,
 					rdm.RunDateTime,
 					rdm.RunDurationMinutes,
@@ -615,8 +581,8 @@ GO' Action
 	WHERE	T.RN = 1;
 
 	-- Storage
-	INSERT	#Exeption
-	SELECT	@@SERVERNAME ServerName,
+	INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message,URL, Severity, Action)
+	SELECT	-1,@@SERVERNAME ServerName,
 			'Storage' Type,
 			'Reads are averaging longer than ' + CASE Type WHEN 1 THEN '10' WHEN 99 THEN '10' ELSE '20' END + 'ms on drive - ' + [Drive] + CASE Type WHEN 1 THEN '(LOG files)' WHEN 99 THEN '(TempDB)' ELSE '(DATA files)' END + ' - ' + CONVERT(VARCHAR(20),RL.[Read Latency]) Message,
 			'http://technet.microsoft.com/en-us/library/aa995945(v=exchg.80).aspx' URL,
@@ -664,7 +630,7 @@ To improve the available supported IOPS, consider adding additional disks to you
 			OR
 			(tab.type != 1 AND RL.[Read Latency] > 20)
 	UNION ALL 
-	SELECT	@@SERVERNAME ServerName,
+	SELECT	-1,@@SERVERNAME ServerName,
 			'Storage' Type,
 			'Writes are averaging longer than ' + CASE Type WHEN 1 THEN '10' WHEN 99 THEN '10' ELSE '20' END + 'ms on drive - ' + [Drive] + CASE Type WHEN 1 THEN '(LOG files)' WHEN 99 THEN '(TempDB)' ELSE '(DATA files)' END + ' - ' + CONVERT(VARCHAR(20),RL.[Write Latency]) Message,
 			'http://technet.microsoft.com/en-us/library/aa995945(v=exchg.80).aspx' URL,
@@ -713,12 +679,11 @@ To improve the available supported IOPS, consider adding additional disks to you
 			(tab.type != 1 AND RL.[Write Latency] > 20)
 	OPTION  ( RECOMPILE );
 
-	INSERT	#Exeption
+	INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message, Severity, Action)
 	SELECT  DISTINCT
-			@@SERVERNAME ServerName,
+			-1, @@SERVERNAME ServerName,
 			'Storage' Type,
 			vs.volume_mount_point + ' has ' + CAST(CAST(vs.available_bytes AS FLOAT) / CAST(vs.total_bytes AS FLOAT)  * 100 AS VARCHAR(50)) + '% free space.' Message,
-			NULL URL,
 			'Minor' Severity,
 			'Check what files located in ' + vs.volume_mount_point Action 
 	FROM    sys.master_files AS f WITH ( NOLOCK )
@@ -732,7 +697,6 @@ To improve the available supported IOPS, consider adding additional disks to you
 	*/
 	DECLARE @PS VARCHAR(4000) = 'powershell.exe "get-wmiobject win32_diskpartition | select name, startingoffset | foreach{$_.name+''|''+$_.startingoffset/1024+''*''}"'
 
-	
 	BEGIN TRY 
 		INSERT  @output 
 		EXEC xp_cmdshell @PS;
@@ -741,8 +705,8 @@ To improve the available supported IOPS, consider adding additional disks to you
 		--{TODO: }
 	END CATCH
 
-	INSERT	#Exeption
-	SELECT	@@SERVERNAME ServerName,
+	INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message,URL, Severity, Action)
+	SELECT	-1,@@SERVERNAME ServerName,
 			'Storage' Type,
 			'"Starting Offset" on ' + RTRIM(LTRIM(SUBSTRING(line, 1, CHARINDEX('|', line) - 1))) + ' is - ' + SO.StartingOffset + 'Kb' Message,
 			'http://technet.microsoft.com/en-us/library/cc966412.aspx
@@ -773,17 +737,15 @@ WHERE	line LIKE ''%1 File%''
 INSERT  @output 
 exec master..xp_cmdshell ''del ' + t.physical_name + ':\TestFile.txt''
 
-INSERT	#Exeption
-SELECT	@@SERVERNAME ServerName,
+INSERT	[' + DB_NAME() + '].dbo.App_Exeption(MainRunID, DatabaseName, Type, Message,URL, Severity, Action)
+SELECT	-1,@@SERVERNAME ServerName,
 		''Storage'' Type,
 		''The block size on drive:' + t.physical_name + ':\ is '' + CONVERT(VARCHAR(25),@BlockSize) + ''kb.'' Message,
 		''http://technet.microsoft.com/en-us/library/cc966412.aspx
 http://www.midnightdba.com/Jen/2014/04/decree-set-your-partition-offset-and-block-size-make-sql-server-faster/'' URL,
 		''Minor'' Severity,
 		''Ask your System guy to change the block size from '' + CONVERT(VARCHAR(25),@BlockSize) + ''kb to 64kb FOR all your data and log files on drive:' + t.physical_name + ''' Action
-WHERE	@BlockSize < 64 
-
-
+WHERE	@BlockSize < 64;
 DELETE FROM @output;
 '
 	FROM	(SELECT	DISTINCT SUBSTRING(physical_name,1,1) physical_name
@@ -809,32 +771,31 @@ DECLARE @BlockSize INT
 		WHERE	LINE IS NULL
 				OR line IN ('
 ','BlockSize  Caption                                            
-')
+');
 
-		IF OBJECT_ID('tempdb..#DriveLeter') IS NOT NULL DROP TABLE #DriveLeter
-		CREATE TABLE #DriveLeter (DriveLeter CHAR(3) NOT NULL)
+		DECLARE @DriveLeter TABLE (DriveLeter CHAR(3) NOT NULL);
 
-		INSERT	#DriveLeter
+		INSERT	@DriveLeter(DriveLeter)
 		SELECT	DISTINCT LEFT(MF.physical_name,3) 
 		FROM	sys.master_files MF
-		WHERE	MF.type = 0
+		WHERE	MF.type = 0;
 
 
-		SELECT	DL.DriveLeter, RTRIM(LTRIM(REPLACE(O.line,DL.DriveLeter,'')))[BlockSize]
-		FROM	#DriveLeter DL
-				LEFT JOIN @output O ON  o.line LIKE '%' + DL.DriveLeter + '%'
-		WHERE	RTRIM(LTRIM(REPLACE(O.line,DL.DriveLeter,''))) NOT LIKE '%65536%';
+		--SELECT	DL.DriveLeter, RTRIM(LTRIM(REPLACE(O.line,DL.DriveLeter,'')))[BlockSize]
+		--FROM	@DriveLeter DL
+		--		LEFT JOIN @output O ON  o.line LIKE '%' + DL.DriveLeter + '%'
+		--WHERE	RTRIM(LTRIM(REPLACE(O.line,DL.DriveLeter,''))) NOT LIKE '%65536%';
 
 
-		INSERT	#Exeption
-		SELECT	@@SERVERNAME ServerName,
+		INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message,URL, Severity, Action)
+		SELECT	-1,@@SERVERNAME ServerName,
 				'Storage' Type,
 				'The block size on drive:' + DL.DriveLeter + ' is ' + RTRIM(LTRIM(REPLACE(O.line,DL.DriveLeter,''))) + 'kb.' Message,
 				'http://technet.microsoft.com/en-us/library/cc966412.aspx
 http://www.midnightdba.com/Jen/2014/04/decree-set-your-partition-offset-and-block-size-make-sql-server-faster/' URL,
 				'Minor' Severity,
 				'Ask your System guy to change the block size from ' + RTRIM(LTRIM(REPLACE(O.line,DL.DriveLeter,''))) + 'kb to 64kb FOR all your data and log files on drive:' + DL.DriveLeter + '' Action
-		FROM	#DriveLeter DL
+		FROM	@DriveLeter DL
 				LEFT JOIN @output O ON  o.line LIKE '%' + DL.DriveLeter + '%'
 		WHERE	RTRIM(LTRIM(REPLACE(O.line,DL.DriveLeter,''))) NOT LIKE '%65536%';
 	END TRY
@@ -850,7 +811,7 @@ http://www.midnightdba.com/Jen/2014/04/decree-set-your-partition-offset-and-bloc
 	--All you’re looking for is Bytes Per Cluster. On my laptop, it’s 4096 bytes. Hey, I don’t have dedicated SQL drives on here. 
 	--But what you want to see is Bytes Per Cluster : 65536.  Again, that’s 65536 bytes / 1024 = 64KB, 
 	--which is what you want for the disks that will hold SQL data and log files.
-	DECLARE @svrName VARCHAR(255)
+	DECLARE @svrName VARCHAR(255);
 	--DECLARE @sql VARCHAR(400)
 	--by default it will take the current server name, we can the set the server name as well
 	SET @svrName = @@SERVERNAME
@@ -873,22 +834,22 @@ http://www.midnightdba.com/Jen/2014/04/decree-set-your-partition-offset-and-bloc
 			[DiskName] VARCHAR(10) ,
 			[Label] VARCHAR(200),
 			[BlockSize] VARCHAR(200)
-		)
+		);
 
-	INSERT  INTO @DISKS
-			SELECT  RTRIM(LTRIM(SUBSTRING(line, 1, CHARINDEX('|', line) - 1))) AS drivename ,
-					RTRIM(LTRIM(SUBSTRING(line, CHARINDEX('&', line) + 1,
-											( CHARINDEX('^', line) - 1 )
-											- CHARINDEX('&', line)))) AS 'Label',
-					RTRIM(LTRIM(SUBSTRING(line, CHARINDEX('^', line) + 1,
-											( CHARINDEX('*', line) - 1)
-											- CHARINDEX('^', line)))) AS [BlockSize]
-			FROM    @output
-			WHERE   line LIKE '[A-Z][:]%'
-			ORDER BY drivename
+	INSERT  @DISKS(DiskName, Label, BlockSize)
+	SELECT  RTRIM(LTRIM(SUBSTRING(line, 1, CHARINDEX('|', line) - 1))) AS drivename ,
+			RTRIM(LTRIM(SUBSTRING(line, CHARINDEX('&', line) + 1,
+									( CHARINDEX('^', line) - 1 )
+									- CHARINDEX('&', line)))) AS 'Label',
+			RTRIM(LTRIM(SUBSTRING(line, CHARINDEX('^', line) + 1,
+									( CHARINDEX('*', line) - 1)
+									- CHARINDEX('^', line)))) AS [BlockSize]
+	FROM    @output
+	WHERE   line LIKE '[A-Z][:]%'
+	ORDER BY drivename;
 
-	INSERT	#Exeption
-	SELECT	@@SERVERNAME ServerName,
+	INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message,URL, Severity, Action)
+	SELECT	-1,@@SERVERNAME ServerName,
 			'Storage' Type,
 			'"Block Size" on ' + DiskName + ' is - ' + [BlockSize] + 'Kb' Message,
 			'http://technet.microsoft.com/en-us/library/cc966412.aspx
@@ -905,8 +866,8 @@ http://www.midnightdba.com/Jen/2014/04/decree-set-your-partition-offset-and-bloc
 	INSERT INTO @output
 	EXEC master.dbo.xp_cmdshell @command;
 
-	INSERT	#Exeption
-	SELECT	@@SERVERNAME ServerName,
+	INSERT	dbo.App_Exeption(MainRunID, DatabaseName, Type, Message,URL, Severity, Action)
+	SELECT	-1,@@SERVERNAME ServerName,
 			'Server' Type,
 			'Serious bug in SQL Server 2012 SP1, due to msiexec process keep running. registry file grow to 2GB' Message,
 			'http://connect.microsoft.com/SQLServer/feedback/details/770630/msiexec-exe-processes-keep-running-after-installation-of-sql-server-2012-sp1' URL,
@@ -923,8 +884,9 @@ http://www.midnightdba.com/Jen/2014/04/decree-set-your-partition-offset-and-bloc
 			AND SERVERPROPERTY('productversion') > '11.0.3000.0'
 
 
-	SELECT	* 
-	FROM	#Exeption
+	SELECT	DatabaseName [Server\Database Name],  Type, Message, URL, Severity, Action 
+	FROM	dbo.App_Exeption
+	WHERE	MainRunID = -1
 	ORDER BY Type,Severity
 /* TODO -- צריך להכניס את הבדיקה הזאת כאשר מצאנו בלוג עדות לכך שיה את מספרי האררורים 
 /*
