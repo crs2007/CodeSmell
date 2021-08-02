@@ -6,6 +6,16 @@ The system is designed to follow the DBA developer to assist in writing better c
 * Execute for a specific database in the server.
 * Execute per alter\create of code object(procedure, function, trigger).
 * Execute per alter\create of the table.
+* Execute for server hard coded defiend checks(EXECUTE [CodeSmell].[Server].[usp_App_RunCheck];)
+
+### Prerequisite:
+* clr enabled(Setup will turn it on for you, for supporting regular expresions search)
+ 
+### How To Install:
+* Build the solution with Visual Studio - Deploy it to your server.
+* Insert the data with Script.PostDeployment_DATA.sql file.
+* Run [Setup].[usp_StatUp] - Change owner to sa, TRUSTWORTHY on, clr enabled on, create a job of retantion on the server.
+* Choose your solution. for activation on any creat\alter of object - create server triggers - [Setup].[usp_CreateServerTrigger]
 
 ### Execute for a specific database in the server:
 ```sql
@@ -217,7 +227,6 @@ SELECT * FROM [CodeSmell].[dbo].[vw_Error_SQL_Server_CurrentVersion]
 -- check if the object was changed or a new version was created in the last 30 days by another person
 -- comment of today's date with a description of your changes in this procedure.
 -- Do not enter the database name in the code (It's not triggered on the 3rd part name out of the current DB scoped)
-
 
 ### Disclaimer
 This code and information are provided "AS IS" without warranty of any kind, either expressed or implied, including but not limited to the implied warranties or merchantability and/or fitness for a particular purpose.  
