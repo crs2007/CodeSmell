@@ -2,6 +2,7 @@
 -- Author:		Sharon
 -- Create date: 13/07/2017
 --				26/07/2021 @LoginName sysname = NULL,@RunningID INT = NULL. Remove Temp tables
+--				28/11/2021 Support @OnlyPrint
 -- Description:	Create Stored Procedure Template 
 -- =============================================
 CREATE PROCEDURE [Setup].[usp_CreateSPTemplate]
@@ -13,13 +14,15 @@ CREATE PROCEDURE [Setup].[usp_CreateSPTemplate]
 	@SubjectGroupID INT,
 	@DBVersionID INT,
 	@SeverityID INT,
-	@Help BIT = 0
+	@Help BIT = 0,
+	@OnlyPrint BIT = 1
 AS
 BEGIN
 	SET NOCOUNT ON;
 	EXEC sys.sp_set_session_context @key = N'IgnoreCodeSmell', @value = N'1';
 
 	DECLARE @cmd NVARCHAR(MAX),
+			@InitCmd NVARCHAR(MAX),
 			@SubjectGroup NVARCHAR(25),
 			@MaxID INT,
 			@uspName sysname;
@@ -36,7 +39,10 @@ BEGIN
 	FROM	dbo.App_SubjectGroup
 	WHERE	ID = @SubjectGroupID;
 	SELECT @uspName = CONCAT(N'usp_',REPLACE(REPLACE(REPLACE(REPLACE(@SubjectGroup,' ',''),']',''),'[',''),CHAR(13),''),'_',REPLACE(REPLACE(REPLACE(REPLACE(@Subject,' ',''),']',''),'[',''),CHAR(13),''));
-
+	SELECT @InitCmd = CONCAT('IF OBJECT_ID(''dbo.',@uspName,''') IS NULL
+BEGIN
+	EXEC (''CREATE PROCEDURE dbo.',@uspName,' AS'');
+END')
 	SELECT @cmd = CONCAT('
 -- =============================================
 -- Author:		',REPLACE(ISNULL(@Author,SUSER_NAME()),CHAR(13),''),'
@@ -111,28 +117,53 @@ END');
 	IF OBJECT_ID(@uspName) IS NULL
 	BEGIN
 		BEGIN TRY
-			EXEC sys.sp_executesql @cmd;
+			IF @OnlyPrint = 1
+			BEGIN
+			    SELECT @InitCmd = CONCAT('USE ',QUOTENAME(DB_NAME()),';
+GO
+',@InitCmd,'
+GO');
+				PRINT @InitCmd;
+				PRINT @cmd;
+				PRINT 'GO';
+			END
+			ELSE
+			BEGIN
+				EXECUTE sys.sp_executesql @InitCmd;
+			    EXECUTE sys.sp_executesql @cmd;
+			END
+			
 		
 			SELECT TOP (1) @MaxID =  ID + 1 FROM dbo.App_GeneralCheck ORDER BY ID DESC;
-
-			INSERT dbo.App_GeneralCheck (ID,Name,Message,
-												IsActive,
-												URL_Reference,
-												SubjectGroupID,
-												DBVersionID,
-												SeverityID,
-												IsOnSingleObject,
-												IsOnSingleObjectOnly,
-												IsPhysicalObject)
-			SELECT	@MaxID,
-					CONCAT('dbo.',@uspName),
-					@Message,1,	
-					@URL_Reference ,
-					@SubjectGroupID,
-					@DBVersionID,
-					@SeverityID,
-					1,0,0
-			WHERE	NOT EXISTS (SELECT TOP (1) 1 FROM dbo.App_GeneralCheck WHERE Name = CONCAT('dbo.',@uspName));
+			IF @OnlyPrint = 1
+			BEGIN
+			    SELECT @cmd = CONCAT('INSERT dbo.App_GeneralCheck (ID,Name,Message, IsActive,URL_Reference,SubjectGroupID,DBVersionID,SeverityID,IsOnSingleObject,IsOnSingleObjectOnly,IsPhysicalObject)
+SELECT	',@MaxID,',''',CONCAT('dbo.',@uspName),''',''',@Message,''',1,',IIF(@URL_Reference IS NULL,'NULL','' + @URL_Reference + ''),', ',@SubjectGroupID,', ',@DBVersionID,', ',@SeverityID,',1,0,0
+WHERE	NOT EXISTS (SELECT TOP (1) 1 FROM dbo.App_GeneralCheck WHERE Name = ''',CONCAT('dbo.',@uspName),''');
+GO');
+				PRINT @cmd;
+			END
+			ELSE
+            BEGIN
+				INSERT dbo.App_GeneralCheck (ID,Name,Message,
+													IsActive,
+													URL_Reference,
+													SubjectGroupID,
+													DBVersionID,
+													SeverityID,
+													IsOnSingleObject,
+													IsOnSingleObjectOnly,
+													IsPhysicalObject)
+				SELECT	@MaxID,
+						CONCAT('dbo.',@uspName),
+						@Message,1,	
+						@URL_Reference ,
+						@SubjectGroupID,
+						@DBVersionID,
+						@SeverityID,
+						1,0,0
+				WHERE	NOT EXISTS (SELECT TOP (1) 1 FROM dbo.App_GeneralCheck WHERE Name = CONCAT('dbo.',@uspName));
+            END
 
 		END TRY
 		BEGIN CATCH

@@ -4,5 +4,5 @@ RETURNS
      TABLE (
         [MatchText] NVARCHAR (4000) NULL)
 AS
- EXTERNAL NAME [CodeSmallesCLR].[UserDefinedFunctions].[RegexMatch]
+ EXTERNAL NAME [CodeSmellCLR].[UserDefinedFunctions].[RegexMatch]
 

@@ -40,6 +40,12 @@ AS
 --  On: 29/07/2021 ; By: sharonr
 --      ALTER: Move Part pre 1 to be first. there is some SP tests related to the collections
 --
+--    On: 03/08/2021 ; By: sharonr
+--        ALTER:Support TriggerEvent_Bitmask to dbo.App_GeneralCheck 
+--
+--    On: 09/05/2022 ; By: sharonr
+--        ALTER:Support dbo.GetParsedPERSIName 
+--
 -- Parameters: 
 --
 -- Recordsets: 
@@ -80,6 +86,23 @@ BEGIN
 		RETURN - 1;
 	END
 
+	IF @I_ObjectName IS NOT NULL
+	BEGIN
+	    IF EXISTS(SELECT	TOP(1) 1
+				FROM	STRING_SPLIT(@I_ObjectName,'.') SS
+						INNER JOIN dbo.App_IgnoreList IL ON IL.Value = SS.value
+				WHERE	IL.ValueType = 'Schema')
+		BEGIN
+		    PRINT 'The Code is not smelling!';
+			RETURN;
+		END
+	END
+	
+	--IF DATALENGTH(@I_Code) > 8000
+	--BEGIN
+	--    PRINT 'The Code is over 8000 byte, Code Smell skiped!';
+	--	RETURN;
+	--END
 	SELECT TOP (1) @RunningID = MR.ID FROM  History.App_MainRun mr WHERE MR.DatabaseName = @DBName AND MR.StartDate = @I_StartDate AND MR.EndDate = @I_EndDate
 	IF @@ROWCOUNT > 0
 	BEGIN
@@ -97,7 +120,7 @@ BEGIN
 		WHERE	MR.ID = @RunningID;
 		RETURN 1;
 	END
-	INSERT History.App_MainRun VALUES(@ExecutionDate,@DataBaseName,@@SERVERNAME,@I_StartDate,@I_EndDate,IIF(@I_ObjectName IS NULL,0,1),ISNULL(@I_LoginName,SUSER_NAME()),@I_ObjectName);
+	INSERT History.App_MainRun VALUES(@ExecutionDate,@DataBaseName,@@SERVERNAME,@I_StartDate,@I_EndDate,IIF(@I_ObjectName IS NULL,0,1),IIF(APP_NAME() = 'SQLCMD',dbo.GetParsedPERSIName(ISNULL(@I_LoginName,SUSER_NAME())),ISNULL(@I_LoginName,SUSER_NAME())),@I_ObjectName);
 	SELECT @RunningID = SCOPE_IDENTITY();
 
 	DECLARE @sqlCmd NVARCHAR(max) = N'' ,
@@ -107,7 +130,8 @@ BEGIN
 	DECLARE @RunnableChecks TABLE (
 		ID INT NOT NULL,
 		ExecuteScript NVARCHAR(4000) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
-		Name NVARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL
+		Name NVARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+		TestOrder INT NOT NULL
 	);
 
 	DECLARE @Error TABLE (
@@ -127,7 +151,7 @@ BEGIN
 
 	SELECT @EventBitMask = BitmaskFlag FROM dbo.TriggerEvent WHERE [Name] = @I_EventType;
 	
-	INSERT	@RunnableChecks(ID, ExecuteScript, Name)
+	INSERT	@RunnableChecks(ID, ExecuteScript, Name, TestOrder)
 	SELECT	GC.ID, N'USE ' + QUOTENAME(@I_DataBaseName) + ';
 DECLARE @ObjectID INT' + IIF(@I_ObjectName IS NOT NULL,' = OBJECT_ID(@I_ObjectName)','') + ';
 BEGIN TRY
@@ -137,17 +161,20 @@ BEGIN CATCH
 	IF XACT_STATE() = -1 ROLLBACK TRAN;
 	INSERT	[' + DB_NAME() + N'].dbo.Mng_ApplicationErrorLog(ProcedureName, ErrorMessage, HostName, LoginName, ExecutionTime, MainRunID)
 	VALUES(''' + GC.Name + N''',ERROR_MESSAGE(),HOST_NAME(),SUSER_NAME(),GETDATE(),' + CONVERT(VARCHAR(10),@RunningID) + ');
-END CATCH',GC.Name
+END CATCH',GC.Name,GC.TestOrder
 	FROM	[dbo].[App_GeneralCheck] GC
 			LEFT JOIN [dbo].[App_Severity] S ON S.ID = GC.SeverityID
 	WHERE	@@MicrosoftVersion / 0x1000000 >= GC.DBVersionID
 			AND GC.IsActive = 1
 			AND GC.IsPhysicalObject = 0
-			AND ((GC.IsOnSingleObject = 1 AND @I_ObjectName IS NOT NULL) OR (@I_ObjectName IS NULL AND GC.[IsOnSingleObjectOnly] = 0));
+			AND ((GC.IsOnSingleObject = 1 AND @I_ObjectName IS NOT NULL) OR (@I_ObjectName IS NULL AND GC.[IsOnSingleObjectOnly] = 0))
+					AND	(@EventBitMask IS NULL OR TriggerEvent_Bitmask & @EventBitMask = @EventBitMask OR TriggerEvent_Bitmask IS NULL)
+	ORDER BY GC.TestOrder ASC;
 
 	DECLARE @ID INT,
 			@ExecuteScript NVARCHAR(4000),
-			@Name NVARCHAR(255);
+			@Name NVARCHAR(255),
+			@TestOrder INT;
 
 	BEGIN TRY
 		SET @Print =  'Part pre 1: PopulateTable ' + CONVERT(VARCHAR(20),GETDATE(),120);
@@ -188,13 +215,13 @@ END CATCH',GC.Name
 			DECLARE crExec CURSOR LOCAL FAST_FORWARD READ_ONLY FOR
 			SELECT	ID ,
 					ExecuteScript,
-					Name
+					Name,TestOrder
 			FROM	@RunnableChecks
-			ORDER BY ID;
+			ORDER BY TestOrder ASC, ID;
 	
 			OPEN crExec;
 	
-			FETCH NEXT FROM crExec INTO @ID, @ExecuteScript, @Name
+			FETCH NEXT FROM crExec INTO @ID, @ExecuteScript, @Name, @TestOrder;
 	
 			WHILE @@FETCH_STATUS = 0
 			BEGIN
@@ -219,7 +246,7 @@ END CATCH',GC.Name
 					IF @I_Debug = 1 SELECT 'dbo.Mng_ApplicationErrorLog' [TableName],* FROM dbo.Mng_ApplicationErrorLog WHERE MainRunID = @RunningID;
 				END CATCH  
 			IF @I_Debug = 1 SELECT 'dbo.App_Exeption' [TableName], * FROM dbo.App_Exeption WHERE MainRunID = @RunningID;
-			FETCH NEXT FROM crExec INTO @ID, @ExecuteScript, @Name
+			FETCH NEXT FROM crExec INTO @ID, @ExecuteScript, @Name, @TestOrder;
 	
 			END
 	
@@ -341,7 +368,7 @@ END CATCH',GC.Name
 					DR.ID,
 					M.FullObjectName
 			FROM	[Background].[Inner_sql_modules] M
-					CROSS APPLY (SELECT	ID ,DR.NotIn_RegexPettern
+					CROSS APPLY (SELECT	ID ,DR.NotIn_RegexPettern,DR.CodeTypeID
 								 FROM	Background.Inner_sql_DefinitionRegex DR
 								 WHERE	DR.MainRunID = M.MainRunID
 										AND M.FullObjectName = DR.FullObjectName
@@ -350,7 +377,9 @@ END CATCH',GC.Name
 																		  WHEN 2 THEN M.DefinitionWithStrings
 																		  WHEN 3 THEN M.Remarks ELSE M.Definition END,DR.Regex,0) = 1-- Regex is Match
 										)DR
-			WHERE	[dbo].[ufn_Util_clr_RegexIsMatch] (M.Definition,DR.NotIn_RegexPettern,0) = 0-- Regex is not match
+			WHERE	[dbo].[ufn_Util_clr_RegexIsMatch] (CASE DR.CodeTypeID WHEN 1 THEN M.Definition
+																		  WHEN 2 THEN M.DefinitionWithStrings
+																		  WHEN 3 THEN M.Remarks ELSE M.Definition END,DR.NotIn_RegexPettern,0) = 0-- Regex is not match
 					AND	M.MainRunID = @RunningID
 			OPTION (RECOMPILE,OPTIMIZE FOR (@i = 50000));
 			
@@ -446,24 +475,19 @@ END CATCH',GC.Name
 
 		IF EXISTS(SELECT TOP (1) 1 FROM @output)
 		BEGIN
-			IF APP_NAME() = 'SQLCMD'
+			SET @O_SQLCMDError = '';
+			SELECT	@O_SQLCMDError += CONCAT(ROW_NUMBER() OVER (ORDER BY e.Severity,e.Message,e.ObjectName),'. ',
+					e.Message,CHAR(13))
+			FROM	@output e
+			WHERE	Severity != 'Warning'
+					AND e.Message NOT IN ('Please Insert comment of today date with a description of your changes in this procedure.')
+			ORDER BY e.Severity,e.Message,e.ObjectName;
+			IF @@ROWCOUNT = 0
 			BEGIN
-				SET @O_SQLCMDError = '';
-				SELECT	@O_SQLCMDError += CONCAT(ROW_NUMBER() OVER (ORDER BY e.Severity,e.Message,e.ObjectName),'. ',
-						e.Message,CHAR(13))
-				FROM	@output e
-				WHERE	Severity != 'Warning'
-						AND e.Message NOT IN ('Please Insert comment of today date with a description of your changes in this procedure.')
-						
-				ORDER BY e.Severity,e.Message,e.ObjectName;
-				IF @@ROWCOUNT = 0
-				BEGIN
-					SET @O_SQLCMDError = NULL;
-				END
-				
-			    --RAISERROR(@PrintableOutput,16,1);
+				SET @O_SQLCMDError = NULL;
 			END
-			ELSE IF APP_NAME() = 'Microsoft SQL Server Management Studio - Query'
+				
+			IF APP_NAME() = 'Microsoft SQL Server Management Studio - Query'
 			BEGIN
 				SELECT	e.DatabaseName,
 						e.ObjectName,
@@ -494,7 +518,7 @@ END CATCH',GC.Name
 		BEGIN--In case of doomed tran
 			SET IDENTITY_INSERT History.App_MainRun ON;
 			INSERT History.App_MainRun(ID,ExecuteDate, DatabaseName, ServerName, StartDate, EndDate, IsSingleSP, UserName, ObjectName)
-			VALUES(@RunningID,@ExecutionDate,@DataBaseName,@@SERVERNAME,@I_StartDate,@I_EndDate,IIF(@I_ObjectName IS NULL,0,1),ISNULL(@I_LoginName,SUSER_NAME()),@I_ObjectName);
+			VALUES(@RunningID,@ExecutionDate,@DataBaseName,@@SERVERNAME,@I_StartDate,@I_EndDate,IIF(@I_ObjectName IS NULL,0,1),IIF(APP_NAME() = 'SQLCMD',dbo.GetParsedPERSIName(ISNULL(@I_LoginName,SUSER_NAME())),ISNULL(@I_LoginName,SUSER_NAME())),@I_ObjectName);
 			SET IDENTITY_INSERT History.App_MainRun OFF;
 		END
 		INSERT	History.App_DetailRun(MainRunID, ObjectName, Type, ColumnName, ConstraintName, Message, URL, Severity, ErrorID)

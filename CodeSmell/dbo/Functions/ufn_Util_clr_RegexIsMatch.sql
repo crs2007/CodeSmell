@@ -2,5 +2,5 @@
 (@Input NVARCHAR (MAX) NULL, @Pattern NVARCHAR (4000) NULL, @IsCS BIT NULL)
 RETURNS BIT
 AS
- EXTERNAL NAME [CodeSmallesCLR].[UserDefinedFunctions].[RegexIsMatch]
+ EXTERNAL NAME [CodeSmellCLR].[UserDefinedFunctions].[RegexIsMatch]
 

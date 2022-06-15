@@ -1,9 +1,11 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.27428.2002
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.31409.214
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{00D1A9C2-B5F0-4AF3-8072-F6C62B433612}") = "CodeSmell", "CodeSmell\CodeSmell.sqlproj", "{933FC751-7635-4495-9A8F-AE72B26CD7B9}"
+EndProject
+Project("{00D1A9C2-B5F0-4AF3-8072-F6C62B433612}") = "CodeSmellCLR", "..\..\..\Git\code-projects\CodeSmallesCLR\CodeSmallesCLR\CodeSmellCLR.sqlproj", "{573985C9-A78A-4010-A9AD-3AA7F9FBF155}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -17,6 +19,12 @@ Global
 		{933FC751-7635-4495-9A8F-AE72B26CD7B9}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{933FC751-7635-4495-9A8F-AE72B26CD7B9}.Release|Any CPU.Build.0 = Release|Any CPU
 		{933FC751-7635-4495-9A8F-AE72B26CD7B9}.Release|Any CPU.Deploy.0 = Release|Any CPU
+		{573985C9-A78A-4010-A9AD-3AA7F9FBF155}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{573985C9-A78A-4010-A9AD-3AA7F9FBF155}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{573985C9-A78A-4010-A9AD-3AA7F9FBF155}.Debug|Any CPU.Deploy.0 = Debug|Any CPU
+		{573985C9-A78A-4010-A9AD-3AA7F9FBF155}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{573985C9-A78A-4010-A9AD-3AA7F9FBF155}.Release|Any CPU.Build.0 = Release|Any CPU
+		{573985C9-A78A-4010-A9AD-3AA7F9FBF155}.Release|Any CPU.Deploy.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

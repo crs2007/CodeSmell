@@ -2,6 +2,8 @@
 -- Author:		Sharon
 -- Create date: 26/05/2019
 -- Update date: 26/07/2021 @LoginName sysname = NULL,@RunningID INT = NULL. Remove Temp tables
+--				On: 09/05/2022 ; By: sharonr
+--					ALTER:Support dbo.GetParsedPERSIName 
 -- Description:	General SP that run all check by Version Number to a physical object only
 -- =============================================
 CREATE PROCEDURE [dbo].[usp_App_RunCheck_Object]
@@ -59,7 +61,7 @@ BEGIN
 		WHERE	MR.ID = @RunningID;
 		RETURN 1;
 	END
-	INSERT History.App_MainRun VALUES(@ExecutionDate,@DataBaseName,@@SERVERNAME,@I_StartDate,@I_EndDate,IIF(@I_ObjectName IS NULL,0,1),SUSER_NAME(),@I_ObjectName);
+	INSERT History.App_MainRun VALUES(@ExecutionDate,@DataBaseName,@@SERVERNAME,@I_StartDate,@I_EndDate,IIF(@I_ObjectName IS NULL,0,1),IIF(APP_NAME() = 'SQLCMD',dbo.GetParsedPERSIName(SUSER_NAME()),SUSER_NAME()),@I_ObjectName);
 	SELECT @RunningID = SCOPE_IDENTITY();
 
 	DECLARE @sqlCmd NVARCHAR(max) = N'' ,
@@ -70,7 +72,8 @@ BEGIN
 		DECLARE @RunnableChecks TABLE (
 		ID INT NOT NULL,
 		ExecuteScript NVARCHAR(4000) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
-		Name NVARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL
+		Name NVARCHAR(255) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+		TestOrder INT NOT NULL
 	);
 
 	DECLARE @Error TABLE (
@@ -87,8 +90,6 @@ BEGIN
 	);
 
 	DECLARE @OutTmp TABLE (ID INT, ObjectName sysname COLLATE SQL_Latin1_General_CP1_CI_AS);
-
-
 	END
 
 	IF @I_ObjectName IS NOT NULL 
@@ -103,7 +104,7 @@ BEGIN
 		END
 	END
 	
-	INSERT	@RunnableChecks(ID, ExecuteScript, Name)
+	INSERT	@RunnableChecks(ID, ExecuteScript, Name,TestOrder)
 	SELECT	GC.ID, N'USE ' + QUOTENAME(@I_DataBaseName) + ';
 DECLARE @ObjectID INT' + IIF(@I_ObjectName IS NOT NULL,' = OBJECT_ID(@I_ObjectName)','') + ';
 BEGIN TRY
@@ -114,17 +115,19 @@ BEGIN CATCH
 	INSERT	[' + DB_NAME() + N'].dbo.Mng_ApplicationErrorLog(ProcedureName, ErrorMessage, HostName, LoginName, ExecutionTime, MainRunID)
 	VALUES(''' + GC.Name + N''',ERROR_MESSAGE(),HOST_NAME(),SUSER_NAME(),GETDATE(),' + CONVERT(VARCHAR(10),@RunningID) + ');
 END CATCH'
-,GC.Name
+,GC.Name,GC.TestOrder
 	FROM	[dbo].[App_GeneralCheck] GC
 			LEFT JOIN [dbo].[App_Severity] S ON S.ID = GC.SeverityID
 	WHERE	@@MicrosoftVersion / 0x1000000 >= GC.DBVersionID
 			AND GC.IsActive = 1
 			AND GC.IsPhysicalObject = 1 -- /Only for Physical Object such as Table(Not code objects)
-			AND ((GC.IsOnSingleObject = 1 AND @I_ObjectName IS NOT NULL) OR (@I_ObjectName IS NULL AND GC.[IsOnSingleObjectOnly] = 0));
+			AND ((GC.IsOnSingleObject = 1 AND @I_ObjectName IS NOT NULL) OR (@I_ObjectName IS NULL AND GC.[IsOnSingleObjectOnly] = 0))
+	ORDER BY GC.TestOrder ASC;
 
 	DECLARE @ID INT,
 			@ExecuteScript NVARCHAR(4000),
-			@Name NVARCHAR(255);
+			@Name NVARCHAR(255),
+			@TestOrder INT;
 	BEGIN TRY
 
 		SET @Print = 'Part 1: Running SP Checks'  + CONVERT(VARCHAR(20),GETDATE(),120);
@@ -132,13 +135,13 @@ END CATCH'
 		DECLARE crExec CURSOR LOCAL FAST_FORWARD READ_ONLY FOR
 		SELECT	ID ,
 				ExecuteScript,
-				Name
+				Name,TestOrder
 		FROM	@RunnableChecks
-		ORDER BY ID;
+		ORDER BY TestOrder, ID;
 	
 		OPEN crExec;
 	
-		FETCH NEXT FROM crExec INTO @ID, @ExecuteScript, @Name
+		FETCH NEXT FROM crExec INTO @ID, @ExecuteScript, @Name, @TestOrder;
 	
 		WHILE @@FETCH_STATUS = 0
 		BEGIN
@@ -163,7 +166,7 @@ END CATCH'
 					IF @I_Debug = 1 SELECT 'dbo.Mng_ApplicationErrorLog' [TableName],* FROM dbo.Mng_ApplicationErrorLog WHERE MainRunID = @RunningID;
 				END CATCH 
 	
-		FETCH NEXT FROM crExec INTO @ID, @ExecuteScript, @Name
+		FETCH NEXT FROM crExec INTO @ID, @ExecuteScript, @Name, @TestOrder;
 	
 		END
 	
@@ -242,7 +245,7 @@ END CATCH'
 		BEGIN--In case of doomed tran
 			SET IDENTITY_INSERT History.App_MainRun ON;
 			INSERT History.App_MainRun(ID,ExecuteDate, DatabaseName, ServerName, StartDate, EndDate, IsSingleSP, UserName, ObjectName)
-			VALUES(@RunningID,@ExecutionDate,@DataBaseName,@@SERVERNAME,@I_StartDate,@I_EndDate,IIF(@I_ObjectName IS NULL,0,1),ISNULL(@LoginName,SUSER_NAME()),@I_ObjectName);
+			VALUES(@RunningID,@ExecutionDate,@DataBaseName,@@SERVERNAME,@I_StartDate,@I_EndDate,IIF(@I_ObjectName IS NULL,0,1),IIF(APP_NAME() = 'SQLCMD',dbo.GetParsedPERSIName(ISNULL(@LoginName,SUSER_NAME())),ISNULL(@LoginName,SUSER_NAME())),@I_ObjectName);
 			SET IDENTITY_INSERT History.App_MainRun OFF;
 		END
 		INSERT	History.App_DetailRun(MainRunID, ObjectName, Type, ColumnName, ConstraintName, Message, URL, Severity, ErrorID)

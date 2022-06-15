@@ -11,7 +11,7 @@
 --	On: 02/07/2021	By: sharonr
 --		Added @I_EventType to activate test only on specific event
 -- =============================================
-CREATE PROCEDURE dbo.usp_App_RunValidationCheckOnSP
+CREATE PROCEDURE [dbo].[usp_App_RunValidationCheckOnSP]
 	@I_DataBaseName sysname,
 	@I_ObjectName	sysname,
 	@I_Code			NVARCHAR(MAX)	= NULL,
@@ -40,6 +40,21 @@ BEGIN
 	    RETURN;
 	END
 	BEGIN TRY
+		--Fix on PERSI user
+		IF @I_LoginName LIKE '%SQLServiceadmin%'
+		BEGIN
+			BEGIN TRY
+				SET @I_LoginName = 
+				(SELECT TOP (1) IIF(CHARINDEX(', %ParentCR',s.host_name) = 0,@I_LoginName,
+					SUBSTRING(s.host_name
+					,IIF(CHARINDEX('%U=',s.host_name) = 0,0,CHARINDEX('%U=',s.host_name)+ 3) 
+					,IIF(CHARINDEX(', %ParentCR',s.host_name) = 0,0,CHARINDEX(', %ParentCR',s.host_name)-14)
+				))[host_name] FROM sys.dm_exec_sessions s WHERE session_id = @@SPID);
+			END TRY
+			BEGIN CATCH
+			
+			END CATCH
+		END
 		EXECUTE [dbo].[usp_App_RunCheck] @I_DataBaseName = @I_DataBaseName,
 										 @I_StartDate = @StartDate,
 										 @I_EndDate = @EndDate,

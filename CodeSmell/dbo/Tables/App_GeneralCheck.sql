@@ -10,9 +10,13 @@
     [IsOnSingleObjectOnly] BIT            CONSTRAINT [DF_App_GeneralCheck_IsOnSingleObjectOnly] DEFAULT ((0)) NOT NULL,
     [IsPhysicalObject]     BIT            CONSTRAINT [DF_App_GeneralCheck_IsPhysicalObject] DEFAULT ((0)) NOT NULL,
     [Message]              VARCHAR (1000) NULL,
+    [TriggerEvent_Bitmask] INT            NULL,
+    [TestOrder]            INT            CONSTRAINT [DF_App_GeneralCheck_TestOrder] DEFAULT ((255)) NOT NULL,
     CONSTRAINT [PK_App_GeneralCheck] PRIMARY KEY CLUSTERED ([ID] ASC),
     CONSTRAINT [FK_App_GeneralCheck_App_Severity] FOREIGN KEY ([SeverityID]) REFERENCES [dbo].[App_Severity] ([ID])
 );
+
+
 
 
 

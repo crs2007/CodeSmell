@@ -9,8 +9,12 @@
     [SeverityID]        INT            NULL,
     [Message]           VARCHAR (1000) NULL,
     CONSTRAINT [PK_App_Error] PRIMARY KEY CLUSTERED ([ID] ASC),
-    CONSTRAINT [FK_App_Error_App_Severity] FOREIGN KEY ([SeverityID]) REFERENCES [dbo].[App_Severity] ([ID])
+    CONSTRAINT [FK_App_Error_App_DBVersion] FOREIGN KEY ([DBVersionID]) REFERENCES [dbo].[App_DBVersion] ([ID]),
+    CONSTRAINT [FK_App_Error_App_Severity] FOREIGN KEY ([SeverityID]) REFERENCES [dbo].[App_Severity] ([ID]),
+    CONSTRAINT [FK_App_Error_App_SubjectGroup] FOREIGN KEY ([SubjectGroupID]) REFERENCES [dbo].[App_SubjectGroup] ([ID])
 );
+
+
 
 
 

@@ -198,9 +198,14 @@
     <Build Include="Util\Stored Procedures\USP_ScriptTableData.sql" />
     <Build Include="Util\Stored Procedures\USP_PrintMax.sql" />
     <Build Include="Util\Stored Procedures\USP_PrintConfigTableData.sql" />
+    <Build Include="dbo\Views\vw_GeneralCheck.sql" />
+    <Build Include="dbo\Functions\GetParsedPERSIName.sql" />
+    <Build Include="dbo\Stored Procedures\usp_UserCodeSmells_NonCompiledOldVersionSPs.sql" />
+    <Build Include="dbo\Stored Procedures\usp_DesignStandards_CleanOldVersionSPs.sql" />
+    <Build Include="dbo\Stored Procedures\usp_DesignStandards_CheckInputsPrefix.sql" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="Assemblies\CodeSmallesCLR.dll" />
+    <None Include="Assemblies\CodeSmellCLR.dll" />
     <None Include="README.md" />
   </ItemGroup>
   <ItemGroup>
